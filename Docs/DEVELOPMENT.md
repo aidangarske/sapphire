@@ -40,7 +40,7 @@ src-tauri/src/
 ## Conventions
 
 - Frontend = Preact + TypeScript; backend = Rust (Tauri commands).
-- Source of truth is plain Markdown on disk — keep it **local-first**, no servers.
+- Source of truth is plain Markdown on disk, so keep it **local-first**, no servers.
 - Integrations shell out to existing tools (`gh`, `curl`) instead of embedding
   credentials where possible.
 - `taskParser` must round-trip an unmodified `board.md` **byte-identically**

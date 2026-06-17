@@ -19,13 +19,13 @@ npm run build     # typecheck + bundle
 ```
 
 The task-board parser (`src/lib/taskParser.ts`) must **round-trip
-byte-identically** — an unmodified `board.md` parsed and re-serialized must equal
+byte-identically**: an unmodified `board.md` parsed and re-serialized must equal
 the original. Keep that invariant green.
 
 ## Conventions
 
 - Frontend is Preact + TypeScript; backend is Rust (Tauri commands).
-- Source of truth is plain Markdown on disk — keep it **local-first**, no servers.
+- Source of truth is plain Markdown on disk, so keep it **local-first**, no servers.
 - Integrations shell out to existing tools (`gh`, `curl`) rather than embedding
   credentials where possible.
 

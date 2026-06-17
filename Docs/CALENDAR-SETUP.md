@@ -37,8 +37,8 @@ your machine.
 
 - Loopback redirect on a random localhost port is used, so there's no redirect
   URI to register (that's why the client must be type **Desktop app**).
-- "External" + "Testing" apps show an *"unverified app"* warning — click
-  **Advanced → Continue**. That's expected for an internal tool.
+- "External" + "Testing" apps show an *"unverified app"* warning. Click
+  **Advanced, then Continue**. That's expected for an internal tool.
 - If you see **"Access blocked"** when choosing your work account, your
   Workspace admin restricts third-party apps and will need to allow it.
 - Scope requested: `calendar.readonly` (plus `openid email`). Read-only.
