@@ -17,7 +17,7 @@ The one-command path (installs missing toolchains too): `npm run setup`.
 | --- | --- |
 | `npm run tauri dev` | Run the app with hot reload |
 | `npm run build` | Typecheck (tsc) + bundle (vite) |
-| `npm test` | Vitest (task-parser round-trip) |
+| `npm test` | Vitest (parser round-trip, note-save lifecycle, date parsing) |
 | `npm run format` / `format:check` | Prettier write / check |
 | `npm run app:install` | Build release `Sapphire.app` → `/Applications` |
 | `cargo fmt --manifest-path src-tauri/Cargo.toml` | Format Rust |
@@ -32,7 +32,8 @@ src/
                           taskParser (board <-> Markdown), createEditor, markdown
   styles/                 design tokens + per-area CSS
 src-tauri/src/
-  lib.rs                  Tauri commands (files, github_*, google_*, fetch_ics)
+  lib.rs                  Tauri commands (files, create_note, github_*, google_*,
+                          fetch_ics, notify_open)
   github.rs               GitHub via the `gh` CLI
   gcal.rs                 Google Calendar OAuth + API
 ```
@@ -45,3 +46,10 @@ src-tauri/src/
   credentials where possible.
 - `taskParser` must round-trip an unmodified `board.md` **byte-identically**
   (covered by `npm test`).
+
+## Notifications
+
+The Tauri notification plugin's desktop banner has no click callback, so clickable
+alerts (open the PR on click) go through `notify_open` in `lib.rs`, which uses
+`mac-notification-sys` with `wait_for_click` and runs `open <url>` on the click.
+Alerts without a link (some calendar reminders) fall back to a plain banner.

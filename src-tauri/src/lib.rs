@@ -318,6 +318,35 @@ async fn fetch_ics(url: String) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Post a macOS notification that opens `url` when the banner is clicked.
+/// Uses mac-notification-sys directly because the notification plugin's desktop
+/// banner has no click callback. Returns true when handled natively.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn notify_open(title: String, body: String, url: String) -> Result<bool, String> {
+    std::thread::spawn(move || {
+        use mac_notification_sys::{set_application, Notification, NotificationResponse};
+        let _ = set_application("md.sapphire.app");
+        let mut n = Notification::new();
+        n.title(&title).message(&body);
+        if !url.is_empty() {
+            n.wait_for_click(true);
+        }
+        if let Ok(NotificationResponse::Click) = n.send() {
+            if !url.is_empty() {
+                let _ = std::process::Command::new("open").arg(&url).spawn();
+            }
+        }
+    });
+    Ok(true)
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn notify_open(_title: String, _body: String, _url: String) -> Result<bool, String> {
+    Ok(false)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -338,6 +367,7 @@ pub fn run() {
             github_account,
             github_prs,
             fetch_ics,
+            notify_open,
             google_status,
             google_calendar,
             google_oauth_login

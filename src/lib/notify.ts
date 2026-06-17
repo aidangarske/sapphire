@@ -1,10 +1,9 @@
+import { invoke } from "@tauri-apps/api/core";
 import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
-  onAction,
 } from "@tauri-apps/plugin-notification";
-import { openExternal } from "./github";
 
 export interface NotifySettings {
   prFailed: boolean;
@@ -45,20 +44,23 @@ export async function ensurePermission(): Promise<boolean> {
 }
 
 export async function notify(o: { title: string; body: string; url?: string }) {
+  // The Tauri plugin's desktop banner has no click callback, so for a notification
+  // that should open something we use terminal-notifier (opens the URL on click).
+  if (o.url) {
+    try {
+      const opened = await invoke<boolean>("notify_open", {
+        title: o.title,
+        body: o.body,
+        url: o.url,
+      });
+      if (opened) return;
+    } catch {
+      /* fall through to the plain banner */
+    }
+  }
   if (!(await ensurePermission())) return;
-  sendNotification({
-    title: o.title,
-    body: o.body,
-    ...(o.url ? { extra: { url: o.url } } : {}),
-  } as never);
+  sendNotification({ title: o.title, body: o.body });
 }
 
-let wired = false;
-export function wireNotificationClicks() {
-  if (wired) return;
-  wired = true;
-  onAction((n: any) => {
-    const url = n?.extra?.url ?? n?.notification?.extra?.url ?? n?.userInfo?.url;
-    if (url) openExternal(url);
-  }).catch(() => {});
-}
+// Kept for callers; click-to-open is handled natively by terminal-notifier now.
+export function wireNotificationClicks() {}
