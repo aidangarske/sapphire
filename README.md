@@ -2,7 +2,7 @@
 
 <img src="Docs/images/logo.svg" width="120" alt="Sapphire logo" />
 
-# Sapphire
+# Sapphire.md
 
 **A fast, lightweight notes and task app for macOS, built by a developer for developers.**
 
