@@ -26,6 +26,7 @@ export interface Account {
 export const githubStatus = () => invoke<string>("github_status");
 export const githubAccount = () => invoke<Account | null>("github_account");
 export const fetchPrs = () => invoke<Pr[]>("github_prs");
+export const fetchMergedPrs = (urls: string[]) => invoke<string[]>("github_prs_merged", { urls });
 
 export function needsAttention(p: Pr): boolean {
   return (

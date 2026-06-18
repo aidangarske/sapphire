@@ -175,6 +175,19 @@ fn merge_node(map: &mut std::collections::HashMap<String, Pr>, node: &Value, slo
     }
 }
 
+/// Given PR URLs, return the subset that have been merged.
+pub fn merged(urls: Vec<String>) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for url in urls {
+        if let Ok(s) = run_gh(&["pr", "view", &url, "--json", "state", "--jq", ".state"]) {
+            if s.trim() == "MERGED" {
+                out.push(url);
+            }
+        }
+    }
+    Ok(out)
+}
+
 pub fn pull_requests() -> Result<Vec<Pr>, String> {
     let login = run_gh(&["api", "user", "--jq", ".login"])?
         .trim()

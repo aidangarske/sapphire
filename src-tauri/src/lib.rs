@@ -260,6 +260,13 @@ async fn github_prs() -> Result<Vec<github::Pr>, String> {
 }
 
 #[tauri::command]
+async fn github_prs_merged(urls: Vec<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || github::merged(urls))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn google_status() -> String {
     tauri::async_runtime::spawn_blocking(gcal::status)
         .await
@@ -366,6 +373,7 @@ pub fn run() {
             github_status,
             github_account,
             github_prs,
+            github_prs_merged,
             fetch_ics,
             notify_open,
             google_status,

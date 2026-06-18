@@ -30,7 +30,7 @@ import {
   writeNote,
 } from "../../lib/store";
 import { buildDaily, clearDate, dateStr, getDailyNoteName, logActivity } from "../../lib/journal";
-import { openExternal } from "../../lib/github";
+import { fetchMergedPrs, openExternal } from "../../lib/github";
 import TaskDetail from "./TaskDetail";
 
 const COLORS = [
@@ -131,8 +131,19 @@ export default function TasksTab({
     if (!activeFile) return;
     setActiveBoardFile(activeFile);
     readNote(`${tasksDir(ws)}/${activeFile}`)
-      .then((t) => setBoard(ensureColumns(parseBoard(t))))
+      .then((t) => {
+        const b = ensureColumns(parseBoard(t));
+        boardRef.current = b;
+        setBoard(b);
+        syncMerged();
+      })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ws, activeFile]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => syncMerged(), 2 * 60 * 1000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws, activeFile]);
 
@@ -140,6 +151,35 @@ export default function TasksTab({
     const b = boardRef.current;
     if (b) writeNote(activePath, serializeBoard(b));
     setVersion((v) => v + 1);
+  }
+
+  // Auto-complete tasks whose linked PR has merged: move them to Done.
+  async function syncMerged() {
+    const b = boardRef.current;
+    if (!b) return;
+    const open: Task[] = [];
+    for (const col of b.columns) {
+      if (col.key === "Done") continue;
+      for (const t of tasksIn(col)) if (t.pr && !t.checked) open.push(t);
+    }
+    const urls = [...new Set(open.map((t) => t.pr!))];
+    if (urls.length === 0) return;
+    let merged: string[];
+    try {
+      merged = await fetchMergedPrs(urls);
+    } catch {
+      return;
+    }
+    const mset = new Set(merged);
+    let changed = false;
+    for (const t of open) {
+      if (t.pr && mset.has(t.pr)) {
+        moveTask(b, t, "Done", countOf("Done"));
+        logActivity("done", t.title);
+        changed = true;
+      }
+    }
+    if (changed) commit();
   }
 
   async function refreshBoards(selectFile?: string) {
