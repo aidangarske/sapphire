@@ -1,8 +1,28 @@
 .app {
+  position: relative;
   display: grid;
   grid-template-columns: var(--rail-w) var(--list-w) 1fr;
   height: 100%;
   overflow: hidden;
+}
+
+.list-resizer {
+  position: absolute;
+  top: 0;
+  width: 7px;
+  height: 100%;
+  margin-left: -3px;
+  cursor: col-resize;
+  z-index: 30;
+}
+
+.list-resizer:hover {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+body.col-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .rail {

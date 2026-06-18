@@ -1,19 +1,27 @@
 .board-wrap {
-  grid-column: 2 / 4;
-  overflow: auto;
+  grid-column: 3 / 4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-0);
 }
 
 .board {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
   padding: 16px;
-  align-items: start;
-  min-height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .board-col {
+  flex: 0 0 300px;
+  width: 300px;
+  max-height: 100%;
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -29,6 +37,7 @@
 }
 
 .board-col-head {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -45,10 +54,12 @@
 }
 
 .board-col-body {
+  flex: 1 1 auto;
+  min-height: 24px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 40px;
 }
 
 .board-count {
@@ -179,6 +190,7 @@
 }
 
 .card-add {
+  flex: none;
   display: flex;
   gap: 6px;
   margin-top: 6px;

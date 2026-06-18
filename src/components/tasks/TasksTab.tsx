@@ -16,7 +16,19 @@ import {
   toggleTask,
   updateTask,
 } from "../../lib/taskParser";
-import { appendDailyNote, boardPath, readNote, writeNote } from "../../lib/store";
+import {
+  BoardFile,
+  appendDailyNote,
+  createBoard,
+  deleteBoard,
+  getActiveBoardFile,
+  listBoards,
+  readNote,
+  renameBoard,
+  setActiveBoardFile,
+  tasksDir,
+  writeNote,
+} from "../../lib/store";
 import { buildDaily, clearDate, dateStr, getDailyNoteName, logActivity } from "../../lib/journal";
 import { openExternal } from "../../lib/github";
 import TaskDetail from "./TaskDetail";
@@ -85,20 +97,75 @@ export default function TasksTab({
   );
   const [selected, setSelected] = useState<{ task: Task; key: ColumnKey } | null>(null);
   const [logMsg, setLogMsg] = useState("");
+  const [boards, setBoards] = useState<BoardFile[]>([]);
+  const [activeFile, setActiveFile] = useState<string>(getActiveBoardFile());
+  const [boardMenu, setBoardMenu] = useState<{ x: number; y: number; board: BoardFile } | null>(
+    null,
+  );
+  const [boardRenaming, setBoardRenaming] = useState<string | null>(null);
+  const [boardRenameVal, setBoardRenameVal] = useState("");
 
   const boardRef = useRef<Board | null>(null);
   boardRef.current = board;
   const drag = useRef<DragState | null>(null);
   const colDrag = useRef<{ key: ColumnKey; moved: boolean } | null>(null);
 
+  const fileOf = (path: string) => path.split("/").pop() ?? "";
+  const activePath = `${tasksDir(ws)}/${activeFile}`;
+
   useEffect(() => {
-    readNote(boardPath(ws)).then((t) => setBoard(ensureColumns(parseBoard(t))));
+    let cancelled = false;
+    listBoards(ws).then((list) => {
+      if (cancelled) return;
+      setBoards(list);
+      const af = list.some((b) => fileOf(b.path) === activeFile) ? activeFile : "board.md";
+      setActiveFile(af);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws]);
+
+  useEffect(() => {
+    if (!activeFile) return;
+    setActiveBoardFile(activeFile);
+    readNote(`${tasksDir(ws)}/${activeFile}`)
+      .then((t) => setBoard(ensureColumns(parseBoard(t))))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ws, activeFile]);
 
   function commit() {
     const b = boardRef.current;
-    if (b) writeNote(boardPath(ws), serializeBoard(b));
+    if (b) writeNote(activePath, serializeBoard(b));
     setVersion((v) => v + 1);
+  }
+
+  async function refreshBoards(selectFile?: string) {
+    const list = await listBoards(ws);
+    setBoards(list);
+    if (selectFile) setActiveFile(selectFile);
+  }
+
+  async function addBoard() {
+    const path = await createBoard(ws, "New Board");
+    await refreshBoards(fileOf(path));
+  }
+
+  async function commitBoardRename(b: BoardFile) {
+    const val = boardRenameVal.trim();
+    setBoardRenaming(null);
+    if (!val) return;
+    const newPath = await renameBoard(ws, b.path, val);
+    await refreshBoards(fileOf(newPath));
+  }
+
+  async function removeBoard(b: BoardFile) {
+    setBoardMenu(null);
+    if (b.isDefault) return;
+    await deleteBoard(b.path);
+    await refreshBoards(fileOf(b.path) === activeFile ? "board.md" : undefined);
   }
 
   function countOf(key: ColumnKey): number {
@@ -177,6 +244,17 @@ export default function TasksTab({
       window.removeEventListener("scroll", close, true);
     };
   }, [menu]);
+
+  useEffect(() => {
+    if (!boardMenu) return;
+    const close = () => setBoardMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [boardMenu]);
 
   function colIndexAt(colEl: Element, y: number): number {
     const cards = Array.from(colEl.querySelectorAll(".card"));
@@ -287,179 +365,258 @@ export default function TasksTab({
     window.addEventListener("pointerup", onUp);
   }
 
+  const boardListAside = (
+    <aside class="list">
+      <div class="list-head">
+        <div class="list-title" style={{ flex: 1 }}>
+          Boards
+        </div>
+        <button class="icon-btn" title="New board" onClick={addBoard}>
+          <Plus size={16} />
+        </button>
+      </div>
+      {boards.map((b) => {
+        const file = fileOf(b.path);
+        return (
+          <button
+            key={b.path}
+            class={`note-item${file === activeFile ? " active" : ""}`}
+            onClick={() => setActiveFile(file)}
+            onContextMenu={(e) => {
+              if (b.isDefault) return;
+              e.preventDefault();
+              setBoardMenu({ x: e.clientX, y: e.clientY, board: b });
+            }}
+          >
+            {boardRenaming === b.path ? (
+              <input
+                class="note-rename"
+                value={boardRenameVal}
+                ref={(el) => {
+                  el?.focus();
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onInput={(e) => setBoardRenameVal(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitBoardRename(b);
+                  } else if (e.key === "Escape") {
+                    setBoardRenaming(null);
+                  }
+                }}
+                onBlur={() => setBoardRenaming(null)}
+              />
+            ) : (
+              <div class="note-row">
+                <span class="note-name">{b.isDefault ? "Daily" : b.name}</span>
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </aside>
+  );
+
+  const boardCtxMenu = boardMenu && (
+    <div class="ctx-menu" style={{ left: `${boardMenu.x}px`, top: `${boardMenu.y}px` }}>
+      <button
+        class="ctx-item"
+        onClick={() => {
+          setBoardRenameVal(boardMenu.board.name);
+          setBoardRenaming(boardMenu.board.path);
+          setBoardMenu(null);
+        }}
+      >
+        Rename
+      </button>
+      <button class="ctx-item danger" onClick={() => removeBoard(boardMenu.board)}>
+        Delete board
+      </button>
+    </div>
+  );
+
   if (!board) {
     return (
-      <div class="board-wrap">
-        <div class="placeholder">Loading board…</div>
-      </div>
+      <>
+        {boardListAside}
+        <div class="board-wrap">
+          <div class="placeholder">Loading board…</div>
+        </div>
+        {boardCtxMenu}
+      </>
     );
   }
 
   return (
-    <div class="board-wrap">
-      <div class="board-toolbar">
-        <button
-          class="btn ghost"
-          onClick={logToday}
-          title="Append today's done/blocked/in-progress to your daily note"
-        >
-          Log today → Daily Notes
-        </button>
-        <button
-          class="btn ghost"
-          onClick={clearToday}
-          title="Discard today's tracked activity (does not touch notes already written)"
-        >
-          Clear
-        </button>
-        {logMsg && <span class="board-log-msg">{logMsg}</span>}
-      </div>
-      <div class="board">
-        {board.columns.map((col) => {
-          const key = col.key;
-          const tasks = tasksIn(col);
-          return (
-            <section
-              class={`board-col${hoverKey === key ? " drop-hover" : ""}`}
-              key={key}
-              data-key={key}
-            >
-              <header class="board-col-head" onPointerDown={(e) => onHeadDown(e, key)}>
-                {key}
-                <span class="board-count">{tasks.length}</span>
-              </header>
-
-              <div class="board-col-body">
-                {tasks.map((t, i) => (
-                  <article
-                    class="card"
-                    key={i}
-                    style={
-                      colorHex(t.color)
-                        ? {
-                            background: `color-mix(in srgb, ${colorHex(t.color)} 14%, var(--bg-2))`,
-                            borderColor: `color-mix(in srgb, ${colorHex(t.color)} 50%, var(--border))`,
-                          }
-                        : undefined
-                    }
-                    onPointerDown={(e) => onCardDown(e, t, key)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setMenu({ x: e.clientX, y: e.clientY, task: t, key });
-                    }}
-                  >
-                    <span class="card-prio">{i + 1}</span>
-                    <label class="card-top">
-                      <input
-                        type="checkbox"
-                        checked={t.checked}
-                        onChange={() => onToggle(t, key)}
-                      />
-                      <span class={t.checked ? "card-title done" : "card-title"}>
-                        {renderTitle(t.title.replace(/#[\w-]+/g, "").trim())}
-                      </span>
-                    </label>
-                    {(t.tags.length > 0 || t.refs.length > 0 || t.pr) && (
-                      <div class="card-meta">
-                        {t.refs.map((id) => (
-                          <button
-                            class="card-ref"
-                            key={`r${id}`}
-                            onClick={() => onOpenNote(id)}
-                            title={`Open note #${id}`}
-                          >
-                            #{id}
-                          </button>
-                        ))}
-                        {t.tags.map((tag) => (
-                          <span class="tag" key={tag}>
-                            #{tag}
-                          </span>
-                        ))}
-                        {t.pr && (
-                          <a class="card-pr" href={t.pr} target="_blank" rel="noreferrer">
-                            PR
-                          </a>
-                        )}
-                      </div>
-                    )}
-                  </article>
-                ))}
-              </div>
-
-              <div class="card-add">
-                <input
-                  placeholder="Add task…"
-                  value={draft[key] ?? ""}
-                  onInput={(e) => setDraft({ ...draft, [key]: e.currentTarget.value })}
-                  onKeyDown={(e) => e.key === "Enter" && onAdd(key)}
-                />
-                <button class="icon-btn" onClick={() => onAdd(key)} title="Add">
-                  <Plus size={14} />
-                </button>
-              </div>
-            </section>
-          );
-        })}
-      </div>
-
-      {menu && (
-        <div class="ctx-menu" style={{ left: `${menu.x}px`, top: `${menu.y}px` }}>
+    <>
+      {boardListAside}
+      <div class="board-wrap">
+        <div class="board-toolbar">
           <button
-            class="ctx-item"
-            onClick={() => {
-              setSelected({ task: menu.task, key: menu.key });
-              setMenu(null);
-            }}
+            class="btn ghost"
+            onClick={logToday}
+            title="Append today's done/blocked/in-progress to your daily note"
           >
-            Details
+            Log today → Daily Notes
           </button>
-          <button class="ctx-item danger" onClick={() => deleteTask(menu.task)}>
-            Delete task
+          <button
+            class="btn ghost"
+            onClick={clearToday}
+            title="Discard today's tracked activity (does not touch notes already written)"
+          >
+            Clear
           </button>
-          <div class="ctx-colors">
-            <button class="ctx-clear" title="No color" onClick={() => setColor(menu.task, null)}>
-              ⊘
-            </button>
-            {COLORS.map((c) => (
-              <button
-                class="ctx-swatch"
-                key={c.name}
-                title={c.name}
-                style={{ background: c.hex }}
-                onClick={() => setColor(menu.task, c.name)}
-              />
-            ))}
-          </div>
+          {logMsg && <span class="board-log-msg">{logMsg}</span>}
         </div>
-      )}
+        <div class="board">
+          {board.columns.map((col) => {
+            const key = col.key;
+            const tasks = tasksIn(col);
+            return (
+              <section
+                class={`board-col${hoverKey === key ? " drop-hover" : ""}`}
+                key={key}
+                data-key={key}
+              >
+                <header class="board-col-head" onPointerDown={(e) => onHeadDown(e, key)}>
+                  {key}
+                  <span class="board-count">{tasks.length}</span>
+                </header>
 
-      {selected && (
-        <TaskDetail
-          task={selected.task}
-          currentKey={selected.key}
-          onSave={(f) => {
-            updateTask(selected.task, f);
-            commit();
-          }}
-          onMove={(k) => {
-            const b = boardRef.current;
-            if (b) {
-              moveTask(b, selected.task, k, countOf(k));
-              logMove(selected.task, k);
+                <div class="board-col-body">
+                  {tasks.map((t, i) => (
+                    <article
+                      class="card"
+                      key={i}
+                      style={
+                        colorHex(t.color)
+                          ? {
+                              background: `color-mix(in srgb, ${colorHex(t.color)} 14%, var(--bg-2))`,
+                              borderColor: `color-mix(in srgb, ${colorHex(t.color)} 50%, var(--border))`,
+                            }
+                          : undefined
+                      }
+                      onPointerDown={(e) => onCardDown(e, t, key)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setMenu({ x: e.clientX, y: e.clientY, task: t, key });
+                      }}
+                    >
+                      <span class="card-prio">{i + 1}</span>
+                      <label class="card-top">
+                        <input
+                          type="checkbox"
+                          checked={t.checked}
+                          onChange={() => onToggle(t, key)}
+                        />
+                        <span class={t.checked ? "card-title done" : "card-title"}>
+                          {renderTitle(t.title.replace(/#[\w-]+/g, "").trim())}
+                        </span>
+                      </label>
+                      {(t.tags.length > 0 || t.refs.length > 0 || t.pr) && (
+                        <div class="card-meta">
+                          {t.refs.map((id) => (
+                            <button
+                              class="card-ref"
+                              key={`r${id}`}
+                              onClick={() => onOpenNote(id)}
+                              title={`Open note #${id}`}
+                            >
+                              #{id}
+                            </button>
+                          ))}
+                          {t.tags.map((tag) => (
+                            <span class="tag" key={tag}>
+                              #{tag}
+                            </span>
+                          ))}
+                          {t.pr && (
+                            <a class="card-pr" href={t.pr} target="_blank" rel="noreferrer">
+                              PR
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+
+                <div class="card-add">
+                  <input
+                    placeholder="Add task…"
+                    value={draft[key] ?? ""}
+                    onInput={(e) => setDraft({ ...draft, [key]: e.currentTarget.value })}
+                    onKeyDown={(e) => e.key === "Enter" && onAdd(key)}
+                  />
+                  <button class="icon-btn" onClick={() => onAdd(key)} title="Add">
+                    <Plus size={14} />
+                  </button>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        {menu && (
+          <div class="ctx-menu" style={{ left: `${menu.x}px`, top: `${menu.y}px` }}>
+            <button
+              class="ctx-item"
+              onClick={() => {
+                setSelected({ task: menu.task, key: menu.key });
+                setMenu(null);
+              }}
+            >
+              Details
+            </button>
+            <button class="ctx-item danger" onClick={() => deleteTask(menu.task)}>
+              Delete task
+            </button>
+            <div class="ctx-colors">
+              <button class="ctx-clear" title="No color" onClick={() => setColor(menu.task, null)}>
+                ⊘
+              </button>
+              {COLORS.map((c) => (
+                <button
+                  class="ctx-swatch"
+                  key={c.name}
+                  title={c.name}
+                  style={{ background: c.hex }}
+                  onClick={() => setColor(menu.task, c.name)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {selected && (
+          <TaskDetail
+            task={selected.task}
+            currentKey={selected.key}
+            onSave={(f) => {
+              updateTask(selected.task, f);
               commit();
-            }
-          }}
-          onDelete={() => {
-            const b = boardRef.current;
-            if (b) {
-              removeTask(b, selected.task);
-              commit();
-            }
-          }}
-          onClose={() => setSelected(null)}
-        />
-      )}
-    </div>
+            }}
+            onMove={(k) => {
+              const b = boardRef.current;
+              if (b) {
+                moveTask(b, selected.task, k, countOf(k));
+                logMove(selected.task, k);
+                commit();
+              }
+            }}
+            onDelete={() => {
+              const b = boardRef.current;
+              if (b) {
+                removeTask(b, selected.task);
+                commit();
+              }
+            }}
+            onClose={() => setSelected(null)}
+          />
+        )}
+        {boardCtxMenu}
+      </div>
+    </>
   );
 }

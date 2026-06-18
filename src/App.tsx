@@ -45,6 +45,27 @@ export default function App() {
   const [wsReady, setWsReady] = useState(false);
   const [noteToOpen, setNoteToOpen] = useState<number | null>(null);
   const [pendingNew, setPendingNew] = useState(false);
+  const [listW, setListW] = useState<number>(() => {
+    const v = Number(localStorage.getItem("sapphire.listW"));
+    return v >= 160 && v <= 560 ? v : 260;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("sapphire.listW", String(listW));
+  }, [listW]);
+
+  function startResize(e: PointerEvent) {
+    e.preventDefault();
+    const move = (ev: PointerEvent) => setListW(Math.min(560, Math.max(160, ev.clientX - 56)));
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.classList.remove("col-resizing");
+    };
+    document.body.classList.add("col-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
 
   function openNote(id: number) {
     setNoteToOpen(id);
@@ -183,7 +204,12 @@ export default function App() {
   }
 
   return (
-    <div class="app">
+    <div class="app" style={{ "--list-w": `${listW}px` } as any}>
+      <div
+        class="list-resizer"
+        style={{ left: `calc(var(--rail-w) + ${listW}px)` }}
+        onPointerDown={startResize}
+      />
       <nav class="rail">
         <div class="rail-brand" title="Sapphire">
           <svg viewBox="104 104 816 816" width="30" height="30" aria-hidden="true">

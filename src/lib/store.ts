@@ -37,8 +37,51 @@ export function setWorkspace(path: string) {
 }
 
 export const notesDir = (ws: string) => `${ws}/notes`;
+export const tasksDir = (ws: string) => `${ws}/tasks`;
 export const boardPath = (ws: string) => `${ws}/tasks/board.md`;
 const indexPath = (ws: string) => `${ws}/config/notes-index.json`;
+
+const BOARD_TEMPLATE = "## Todo\n\n## In Progress\n\n## Blocked\n\n## Done\n\n## Want To Do\n";
+const ACTIVE_BOARD_KEY = "sapphire.activeBoard";
+
+export interface BoardFile {
+  name: string; // display name (filename without .md)
+  path: string;
+  isDefault: boolean; // the primary "Daily" board (board.md)
+}
+
+export const getActiveBoardFile = () => localStorage.getItem(ACTIVE_BOARD_KEY) ?? "board.md";
+export const setActiveBoardFile = (f: string) => localStorage.setItem(ACTIVE_BOARD_KEY, f);
+
+export async function listBoards(ws: string): Promise<BoardFile[]> {
+  const entries = await invoke<NoteEntry[]>("list_notes", { dir: tasksDir(ws) });
+  const boards = entries.map((e) => ({
+    name: e.name.replace(/\.md$/, ""),
+    path: e.path,
+    isDefault: e.name === "board.md",
+  }));
+  // primary board first, then the rest oldest-to-newest by name
+  boards.sort((a, b) => (a.isDefault ? -1 : b.isDefault ? 1 : a.name.localeCompare(b.name)));
+  return boards;
+}
+
+export async function createBoard(ws: string, name: string): Promise<string> {
+  const path = await invoke<string>("create_note", { dir: tasksDir(ws), title: name || "Board" });
+  await writeNote(path, BOARD_TEMPLATE);
+  return path;
+}
+
+export async function renameBoard(ws: string, oldPath: string, newName: string): Promise<string> {
+  const safe = newName.trim().replace(/[\/\\:]/g, "-") || "Board";
+  const newPath = `${tasksDir(ws)}/${safe}.md`;
+  if (newPath === oldPath) return oldPath;
+  await invoke("rename_note", { from: oldPath, to: newPath });
+  return newPath;
+}
+
+export function deleteBoard(path: string): Promise<void> {
+  return invoke("delete_note", { path });
+}
 
 export async function pickWorkspace(): Promise<string | null> {
   const picked = await open({
