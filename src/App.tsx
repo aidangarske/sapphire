@@ -185,16 +185,27 @@ export default function App() {
 
   useEffect(() => {
     if (!ws || !wsReady) return;
-    const today = dateStr(Date.now());
-    (async () => {
+    let stop = false;
+    // Flush any day's activity older than "today" to the daily note. Runs on
+    // launch, on window focus, and every few minutes so it also fires when the
+    // app stays open across midnight (overnight) — not only on relaunch.
+    const flushPast = async () => {
+      const today = dateStr(Date.now());
       for (const d of datesWithActivity()) {
-        if (d < today) {
-          const md = buildDaily(d);
-          if (md) await appendDailyNote(ws, getDailyNoteName(), md);
-          clearDate(d);
-        }
+        if (stop || d >= today) continue;
+        const md = buildDaily(d);
+        if (md) await appendDailyNote(ws, getDailyNoteName(), md);
+        clearDate(d);
       }
-    })();
+    };
+    flushPast();
+    const id = window.setInterval(flushPast, 5 * 60 * 1000);
+    window.addEventListener("focus", flushPast);
+    return () => {
+      stop = true;
+      clearInterval(id);
+      window.removeEventListener("focus", flushPast);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws, wsReady]);
 

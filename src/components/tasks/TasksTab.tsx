@@ -175,7 +175,7 @@ export default function TasksTab({
     for (const t of open) {
       if (t.pr && mset.has(t.pr)) {
         moveTask(b, t, "Done", countOf("Done"));
-        logActivity("done", t.title);
+        logActivity("done", t.title, undefined, t.pr);
         changed = true;
       }
     }
@@ -220,7 +220,7 @@ export default function TasksTab({
     if (!t.checked) {
       if (key === "Done") toggleTask(b, t);
       else moveTask(b, t, "Done", countOf("Done"));
-      logActivity("done", t.title);
+      logActivity("done", t.title, undefined, t.pr);
     } else {
       if (key === "Done") moveTask(b, t, "Todo", 0);
       else toggleTask(b, t);
@@ -238,9 +238,9 @@ export default function TasksTab({
   }
 
   function logMove(t: Task, key: ColumnKey) {
-    if (key === "Done") logActivity("done", t.title);
-    else if (key === "Blocked") logActivity("blocked", t.title, t.body || undefined);
-    else if (key === "In Progress") logActivity("inprogress", t.title);
+    if (key === "Done") logActivity("done", t.title, undefined, t.pr);
+    else if (key === "Blocked") logActivity("blocked", t.title, t.body || undefined, t.pr);
+    else if (key === "In Progress") logActivity("inprogress", t.title, undefined, t.pr);
   }
 
   async function logToday() {

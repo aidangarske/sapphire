@@ -6,6 +6,7 @@ export interface Activity {
   action: ActAction;
   title: string;
   note?: string;
+  pr?: string; // linked PR url, if the task has one
 }
 
 const KEY = "sapphire.activity";
@@ -46,13 +47,20 @@ const clean = (t: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-export function logActivity(action: ActAction, title: string, note?: string) {
+export function logActivity(action: ActAction, title: string, note?: string, pr?: string) {
   const ts = Date.now();
   const date = dateStr(ts);
   const t = clean(title);
   if (!t) return;
   const all = load().filter((a) => !(a.date === date && a.action === action && a.title === t));
-  all.push({ ts, date, action, title: t, note: note ? clean(note) : undefined });
+  all.push({
+    ts,
+    date,
+    action,
+    title: t,
+    note: note ? clean(note) : undefined,
+    pr: pr || undefined,
+  });
   save(all);
 }
 
@@ -79,17 +87,18 @@ export function buildDaily(date: string): string {
     year: "numeric",
   });
 
+  const link = (a: Activity) => (a.pr && !a.title.includes(a.pr) ? ` ${a.pr}` : "");
   let md = `\n## ${heading}\n`;
   if (done.length) {
-    md += `\n**Done**\n` + done.map((a) => `- ${a.title}`).join("\n") + "\n";
+    md += `\n**Done**\n` + done.map((a) => `- ${a.title}${link(a)}`).join("\n") + "\n";
   }
   if (inprog.length) {
-    md += `\n**In progress**\n` + inprog.map((a) => `- ${a.title}`).join("\n") + "\n";
+    md += `\n**In progress**\n` + inprog.map((a) => `- ${a.title}${link(a)}`).join("\n") + "\n";
   }
   if (blocked.length) {
     md +=
       `\n**Blocked**\n` +
-      blocked.map((a) => `- ${a.title}${a.note ? ` — ${a.note}` : ""}`).join("\n") +
+      blocked.map((a) => `- ${a.title}${link(a)}${a.note ? `: ${a.note}` : ""}`).join("\n") +
       "\n";
   }
   return md;
