@@ -55,6 +55,17 @@ export default function Editor({ value, onChange, mode }: Props) {
   const valueRef = useRef(value);
   valueRef.current = value;
   const [html, setHtml] = useState(() => renderMarkdown(value));
+  const renderTimer = useRef<number | undefined>(undefined);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+
+  // The preview re-renders the whole note (markdown-it + sanitize + path walk),
+  // so debounce it off the keystroke path and skip it when the pane is hidden.
+  function scheduleRender(text: string) {
+    clearTimeout(renderTimer.current);
+    if (modeRef.current === "raw") return;
+    renderTimer.current = window.setTimeout(() => setHtml(renderMarkdown(text)), 150);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -62,11 +73,12 @@ export default function Editor({ value, onChange, mode }: Props) {
       if (cancelled || !host.current) return;
       view.current = createEditorView(host.current, valueRef.current, (t) => {
         onChangeRef.current(t);
-        setHtml(renderMarkdown(t));
+        scheduleRender(t);
       });
     });
     return () => {
       cancelled = true;
+      clearTimeout(renderTimer.current);
       view.current?.destroy();
       view.current = null;
     };
@@ -78,8 +90,15 @@ export default function Editor({ value, onChange, mode }: Props) {
     if (v && value !== v.state.doc.toString()) {
       v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: value } });
     }
-    setHtml(renderMarkdown(value));
+    scheduleRender(value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+
+  // Switching into a rendered mode needs an immediate render of the latest text.
+  useEffect(() => {
+    if (mode !== "raw") setHtml(renderMarkdown(valueRef.current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   function onPreviewClick(e: MouseEvent) {
     const target = e.target as HTMLElement;

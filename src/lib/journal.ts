@@ -88,18 +88,16 @@ export function buildDaily(date: string): string {
   });
 
   const link = (a: Activity) => (a.pr && !a.title.includes(a.pr) ? ` ${a.pr}` : "");
+  const entry = (a: Activity) => `- ${a.title}${link(a)}${a.note ? `: ${a.note}` : ""}`;
   let md = `\n## ${heading}\n`;
   if (done.length) {
-    md += `\n**Done**\n` + done.map((a) => `- ${a.title}${link(a)}`).join("\n") + "\n";
+    md += `\n**Done**\n` + done.map(entry).join("\n") + "\n";
   }
   if (inprog.length) {
-    md += `\n**In progress**\n` + inprog.map((a) => `- ${a.title}${link(a)}`).join("\n") + "\n";
+    md += `\n**In progress**\n` + inprog.map(entry).join("\n") + "\n";
   }
   if (blocked.length) {
-    md +=
-      `\n**Blocked**\n` +
-      blocked.map((a) => `- ${a.title}${link(a)}${a.note ? `: ${a.note}` : ""}`).join("\n") +
-      "\n";
+    md += `\n**Blocked**\n` + blocked.map(entry).join("\n") + "\n";
   }
   return md;
 }
