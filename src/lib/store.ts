@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { addTask, ensureColumns, parseBoard, serializeBoard } from "./taskParser";
+import { addTask, ensureColumns, parseBoard, serializeBoard, tasksIn } from "./taskParser";
+import { fetchPrs } from "./github";
 
 export interface NoteEntry {
   name: string;
@@ -234,14 +235,70 @@ export async function addBoardTask(
 
 export async function createTaskFromPr(
   ws: string,
-  pr: { repo: string; number: number; title: string; url: string },
+  pr: {
+    repo: string;
+    number: number;
+    title: string;
+    url: string;
+    review_requested_of_me?: boolean;
+  },
 ): Promise<void> {
   const path = boardPath(ws);
   const board = ensureColumns(parseBoard(await readNote(path)));
   const repoName = pr.repo.split("/").pop() ?? pr.repo;
-  if (!addTask(board, "Todo", `${pr.title} #${repoName}`, { pr: pr.url }))
-    throw new Error("Todo column missing");
+  const title = pr.review_requested_of_me
+    ? `Review: ${pr.title} #${repoName} #review`
+    : `${pr.title} #${repoName}`;
+  if (!addTask(board, "Todo", title, { pr: pr.url })) throw new Error("Todo column missing");
   await writeNote(path, serializeBoard(board));
+}
+
+const AUTO_TODO_KEY = "sapphire.autoTodoSeen";
+function loadAutoTodoSeen(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(AUTO_TODO_KEY) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+// Add any PR you authored to the Daily board's Todo column, once each. A "seen"
+// set records URLs we've added so deleting the task won't make it reappear.
+export async function syncCreatedPrsToTodo(ws: string): Promise<number> {
+  let prs;
+  try {
+    prs = await fetchPrs();
+  } catch {
+    return 0;
+  }
+  const authored = prs.filter((p) => p.authored);
+  if (authored.length === 0) return 0;
+
+  const seen = loadAutoTodoSeen();
+  const path = boardPath(ws);
+  let board;
+  try {
+    board = ensureColumns(parseBoard(await readNote(path)));
+  } catch {
+    return 0;
+  }
+  const onBoard = new Set<string>();
+  for (const col of board.columns) for (const t of tasksIn(col)) if (t.pr) onBoard.add(t.pr);
+
+  let added = 0;
+  for (const pr of authored) {
+    if (seen.has(pr.url) || onBoard.has(pr.url)) {
+      seen.add(pr.url);
+      continue;
+    }
+    const repoName = pr.repo.split("/").pop() ?? pr.repo;
+    addTask(board, "Todo", `${pr.title} #${repoName}`, { pr: pr.url });
+    seen.add(pr.url);
+    added++;
+  }
+  localStorage.setItem(AUTO_TODO_KEY, JSON.stringify([...seen]));
+  if (added > 0) await writeNote(path, serializeBoard(board));
+  return added;
 }
 
 export async function createNote(ws: string, title: string): Promise<string> {

@@ -10,6 +10,13 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 import { runWatcherTick } from "../lib/watcher";
+import {
+  findRepoDir,
+  getRepoDir,
+  relaunchApp,
+  runUpdate,
+  setRepoDir as storeRepoDir,
+} from "../lib/updater";
 
 export default function Settings() {
   const [status, setStatus] = useState<string>("");
@@ -22,6 +29,31 @@ export default function Settings() {
   const [notifMsg, setNotifMsg] = useState("");
   const [dailyNote, setDailyNote] = useState(getDailyNoteName());
   const [dailyMsg, setDailyMsg] = useState("");
+  const [repoDir, setRepoDir] = useState(getRepoDir());
+  const [updateLog, setUpdateLog] = useState<string[]>([]);
+  const [updating, setUpdating] = useState(false);
+  const [updateOk, setUpdateOk] = useState<boolean | null>(null);
+
+  async function doUpdate() {
+    const dir = repoDir.trim();
+    if (!dir) {
+      setUpdateOk(false);
+      setUpdateLog(["Set the path to your Sapphire source checkout first."]);
+      return;
+    }
+    storeRepoDir(dir);
+    setUpdating(true);
+    setUpdateOk(null);
+    setUpdateLog([`Updating from ${dir}…`]);
+    await runUpdate(
+      dir,
+      (line) => setUpdateLog((l) => [...l, line]),
+      (ok) => {
+        setUpdating(false);
+        setUpdateOk(ok);
+      },
+    );
+  }
 
   function saveDaily() {
     setDailyNoteName(dailyNote);
@@ -72,6 +104,7 @@ export default function Settings() {
       setStatus(s);
       if (s === "ok") setAccount(await githubAccount());
     });
+    if (!getRepoDir()) findRepoDir().then((d) => d && setRepoDir(d));
   }, []);
 
   function saveCalendar() {
@@ -228,6 +261,35 @@ export default function Settings() {
             </button>
           </div>
           {calMsg && <div class="settings-msg">{calMsg}</div>}
+
+          <h2 style={{ marginTop: "30px" }}>App updates</h2>
+          <p class="settings-help">
+            Pulls the latest code from GitHub and rebuilds Sapphire, replacing the copy in{" "}
+            <code>/Applications</code>. Needs your local source checkout plus the Node and Rust
+            toolchains. Local uncommitted changes block the pull (nothing is overwritten).
+          </p>
+          <div class="settings-row">
+            <input
+              placeholder="~/sapphire"
+              value={repoDir}
+              onInput={(e) => setRepoDir(e.currentTarget.value)}
+            />
+            <button class="btn" onClick={doUpdate} disabled={updating}>
+              {updating ? "Updating…" : "Update now"}
+            </button>
+          </div>
+          {updateLog.length > 0 && <pre class="update-log">{updateLog.join("\n")}</pre>}
+          {updateOk === true && (
+            <div class="settings-msg">
+              Updated.{" "}
+              <button class="btn" style={{ marginLeft: "6px" }} onClick={() => relaunchApp()}>
+                Restart Sapphire
+              </button>
+            </div>
+          )}
+          {updateOk === false && (
+            <div class="settings-msg">Update did not complete — see the log above.</div>
+          )}
 
           <h2 style={{ marginTop: "30px" }}>Workspace</h2>
           <p class="settings-help">{getWorkspace() ?? "No workspace selected."}</p>

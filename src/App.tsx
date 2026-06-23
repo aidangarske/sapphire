@@ -20,6 +20,7 @@ import {
   getWorkspace,
   initWorkspace,
   pickWorkspace,
+  syncCreatedPrsToTodo,
 } from "./lib/store";
 import { buildDaily, clearDate, dateStr, datesWithActivity, getDailyNoteName } from "./lib/journal";
 import { Pr, githubStatus } from "./lib/github";
@@ -118,6 +119,8 @@ export default function App() {
     let timer: number | undefined;
     const tick = () => {
       runWatcherTick();
+      const w = getWorkspace();
+      if (w) syncCreatedPrsToTodo(w);
     };
     githubStatus().then((s) => {
       if (s !== "ok") return;

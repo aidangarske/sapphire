@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
+use tauri::{AppHandle, Emitter};
 
 /// The chosen workspace root. File commands are confined to it.
 #[derive(Default)]
@@ -354,6 +355,82 @@ async fn notify_open(_title: String, _body: String, _url: String) -> Result<bool
     Ok(false)
 }
 
+fn expand_home(path: &str) -> String {
+    match path.strip_prefix("~/") {
+        Some(rest) => format!("{}/{}", std::env::var("HOME").unwrap_or_default(), rest),
+        None => path.to_string(),
+    }
+}
+
+/// Locate a local Sapphire source checkout in the usual places.
+#[tauri::command]
+fn find_repo_dir() -> Option<String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    for rel in [
+        "sapphire",
+        "GitHub/sapphire",
+        "Projects/sapphire",
+        "Documents/sapphire",
+        "src/sapphire",
+    ] {
+        let dir = Path::new(&home).join(rel);
+        if dir.join("scripts/build-app.sh").exists() {
+            return Some(dir.to_string_lossy().to_string());
+        }
+    }
+    None
+}
+
+/// Pull latest from GitHub and rebuild/reinstall the app, streaming output via
+/// the `app-update-log` event and finishing with `app-update-done` (bool ok).
+#[tauri::command]
+fn app_update(app: AppHandle, repo_dir: String) -> Result<(), String> {
+    let dir = std::path::PathBuf::from(expand_home(&repo_dir));
+    if !dir.join(".git").exists() {
+        return Err(format!("Not a git checkout: {}", dir.display()));
+    }
+    if !dir.join("scripts/build-app.sh").exists() {
+        return Err("scripts/build-app.sh not found — is this the Sapphire repo?".into());
+    }
+    std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        use std::process::{Command, Stdio};
+        let emit = |line: String| {
+            let _ = app.emit("app-update-log", line);
+        };
+        let child = Command::new("bash")
+            .arg("-lc")
+            .arg("exec 2>&1; git pull --ff-only && bash scripts/build-app.sh --install")
+            .current_dir(&dir)
+            .stdout(Stdio::piped())
+            .spawn();
+        let mut child = match child {
+            Ok(c) => c,
+            Err(e) => {
+                emit(format!("failed to start update: {}", e));
+                let _ = app.emit("app-update-done", false);
+                return;
+            }
+        };
+        if let Some(out) = child.stdout.take() {
+            for line in BufReader::new(out).lines() {
+                match line {
+                    Ok(l) => emit(l),
+                    Err(_) => break,
+                }
+            }
+        }
+        let ok = child.wait().map(|s| s.success()).unwrap_or(false);
+        let _ = app.emit("app-update-done", ok);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn app_relaunch(app: AppHandle) {
+    app.restart();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -378,7 +455,10 @@ pub fn run() {
             notify_open,
             google_status,
             google_calendar,
-            google_oauth_login
+            google_oauth_login,
+            find_repo_dir,
+            app_update,
+            app_relaunch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

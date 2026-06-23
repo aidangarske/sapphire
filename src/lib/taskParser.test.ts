@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { addTask, moveTask, parseBoard, serializeBoard, tasksIn, toggleTask } from "./taskParser";
+import {
+  addColumn,
+  addTask,
+  moveTask,
+  parseBoard,
+  removeColumn,
+  renameColumn,
+  serializeBoard,
+  tasksIn,
+  toggleTask,
+} from "./taskParser";
 
 const SAMPLE = `Some preamble note.
 
@@ -82,5 +92,36 @@ describe("taskParser mutations", () => {
     addTask(b, "In Progress", "New thing #x");
     const ip = tasksIn(b.columns.find((c) => c.key === "In Progress")!);
     expect(ip.map((t) => t.title)).toContain("New thing #x");
+  });
+});
+
+describe("custom columns", () => {
+  it("parses an arbitrary heading as a column", () => {
+    const b = parseBoard(`## Todo\n\n## In Review\n\n- [ ] Ship it\n`);
+    expect(b.columns.map((c) => c.key)).toEqual(["Todo", "In Review"]);
+    expect(tasksIn(b.columns[1])[0].title).toContain("Ship it");
+  });
+
+  it("adds, moves into, and serializes a new column", () => {
+    const b = parseBoard(SAMPLE);
+    expect(addColumn(b, "In Review")).toBeTruthy();
+    const t = tasksIn(b.columns[0])[0];
+    moveTask(b, t, "In Review", 0);
+    expect(tasksIn(b.columns.find((c) => c.key === "In Review")!)[0]).toBe(t);
+    expect(serializeBoard(b)).toContain("## In Review");
+  });
+
+  it("rejects duplicate column names (case-insensitive)", () => {
+    const b = parseBoard(SAMPLE);
+    expect(addColumn(b, "todo")).toBeNull();
+  });
+
+  it("renames and removes columns", () => {
+    const b = parseBoard(SAMPLE);
+    expect(renameColumn(b, "Blocked", "Needs Review")).toBe(true);
+    expect(b.columns.map((c) => c.key)).toContain("Needs Review");
+    expect(serializeBoard(b)).toContain("## Needs Review");
+    removeColumn(b, "Needs Review");
+    expect(b.columns.map((c) => c.key)).not.toContain("Needs Review");
   });
 });

@@ -5,11 +5,14 @@ import {
   Board,
   ColumnKey,
   Task,
+  addColumn,
   addTask,
   ensureColumns,
   moveTask,
   parseBoard,
+  removeColumn,
   removeTask,
+  renameColumn,
   serializeBoard,
   setTaskColor,
   tasksIn,
@@ -42,6 +45,8 @@ const COLORS = [
   { name: "pink", hex: "#db61a2" },
 ];
 const colorHex = (name?: string) => COLORS.find((c) => c.name === name)?.hex;
+
+const prNumber = (url: string) => url.match(/\/pull\/(\d+)/)?.[1] ?? "";
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 function renderTitle(text: string) {
@@ -104,11 +109,27 @@ export default function TasksTab({
   );
   const [boardRenaming, setBoardRenaming] = useState<string | null>(null);
   const [boardRenameVal, setBoardRenameVal] = useState("");
+  const [colMenu, setColMenu] = useState<{ x: number; y: number; key: ColumnKey } | null>(null);
+  const [colRenaming, setColRenaming] = useState<ColumnKey | null>(null);
+  const [colRenameVal, setColRenameVal] = useState("");
+  const [addingCol, setAddingCol] = useState(false);
+  const [newColName, setNewColName] = useState("");
 
   const boardRef = useRef<Board | null>(null);
   boardRef.current = board;
   const drag = useRef<DragState | null>(null);
   const colDrag = useRef<{ key: ColumnKey; moved: boolean } | null>(null);
+  const busyRef = useRef(false);
+  busyRef.current = !!(
+    selected ||
+    menu ||
+    boardMenu ||
+    boardRenaming ||
+    colMenu ||
+    colRenaming ||
+    addingCol ||
+    drag.current
+  );
 
   const fileOf = (path: string) => path.split("/").pop() ?? "";
   const activePath = `${tasksDir(ws)}/${activeFile}`;
@@ -144,6 +165,24 @@ export default function TasksTab({
   useEffect(() => {
     const id = window.setInterval(() => syncMerged(), 2 * 60 * 1000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ws, activeFile]);
+
+  // Pick up board changes made in the background (e.g. created PRs auto-added to
+  // Todo) when the window regains focus, unless the user is mid-interaction.
+  useEffect(() => {
+    const reload = () => {
+      if (busyRef.current) return;
+      readNote(`${tasksDir(ws)}/${activeFile}`)
+        .then((t) => {
+          const b = ensureColumns(parseBoard(t));
+          boardRef.current = b;
+          setBoard(b);
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("focus", reload);
+    return () => window.removeEventListener("focus", reload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws, activeFile]);
 
@@ -237,6 +276,29 @@ export default function TasksTab({
     commit();
   }
 
+  function commitAddColumn() {
+    const b = boardRef.current;
+    const name = newColName.trim();
+    setAddingCol(false);
+    setNewColName("");
+    if (b && name && addColumn(b, name)) commit();
+  }
+
+  function commitColRename(key: ColumnKey) {
+    const b = boardRef.current;
+    const val = colRenameVal.trim();
+    setColRenaming(null);
+    if (b && val && renameColumn(b, key, val)) commit();
+  }
+
+  function deleteColumn(key: ColumnKey) {
+    const b = boardRef.current;
+    setColMenu(null);
+    if (!b) return;
+    removeColumn(b, key);
+    commit();
+  }
+
   function logMove(t: Task, key: ColumnKey) {
     if (key === "Done") logActivity("done", t.title, t.body || undefined, t.pr);
     else if (key === "Blocked") logActivity("blocked", t.title, t.body || undefined, t.pr);
@@ -295,6 +357,17 @@ export default function TasksTab({
       window.removeEventListener("scroll", close, true);
     };
   }, [boardMenu]);
+
+  useEffect(() => {
+    if (!colMenu) return;
+    const close = () => setColMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [colMenu]);
 
   function colIndexAt(colEl: Element, y: number): number {
     const cards = Array.from(colEl.querySelectorAll(".card"));
@@ -519,9 +592,41 @@ export default function TasksTab({
                 key={key}
                 data-key={key}
               >
-                <header class="board-col-head" onPointerDown={(e) => onHeadDown(e, key)}>
-                  {key}
-                  <span class="board-count">{tasks.length}</span>
+                <header
+                  class="board-col-head"
+                  onPointerDown={(e) => {
+                    if (colRenaming !== key) onHeadDown(e, key);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setColMenu({ x: e.clientX, y: e.clientY, key });
+                  }}
+                >
+                  {colRenaming === key ? (
+                    <input
+                      class="note-rename"
+                      value={colRenameVal}
+                      ref={(el) => {
+                        el?.focus();
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onInput={(e) => setColRenameVal(e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitColRename(key);
+                        } else if (e.key === "Escape") {
+                          setColRenaming(null);
+                        }
+                      }}
+                      onBlur={() => setColRenaming(null)}
+                    />
+                  ) : (
+                    <>
+                      {key}
+                      <span class="board-count">{tasks.length}</span>
+                    </>
+                  )}
                 </header>
 
                 <div class="board-col-body">
@@ -567,13 +672,13 @@ export default function TasksTab({
                             </button>
                           ))}
                           {t.tags.map((tag) => (
-                            <span class="tag" key={tag}>
+                            <span class={tag === "review" ? "tag review" : "tag"} key={tag}>
                               #{tag}
                             </span>
                           ))}
                           {t.pr && (
                             <a class="card-pr" href={t.pr} target="_blank" rel="noreferrer">
-                              PR
+                              PR{prNumber(t.pr) ? ` #${prNumber(t.pr)}` : ""}
                             </a>
                           )}
                         </div>
@@ -596,7 +701,53 @@ export default function TasksTab({
               </section>
             );
           })}
+
+          {addingCol ? (
+            <div class="board-add-col">
+              <input
+                class="board-add-input"
+                placeholder="Column name…"
+                value={newColName}
+                ref={(el) => {
+                  el?.focus();
+                }}
+                onInput={(e) => setNewColName(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitAddColumn();
+                  } else if (e.key === "Escape") {
+                    setAddingCol(false);
+                    setNewColName("");
+                  }
+                }}
+                onBlur={commitAddColumn}
+              />
+            </div>
+          ) : (
+            <button class="board-add-col" onClick={() => setAddingCol(true)} title="Add column">
+              <Plus size={16} /> Add column
+            </button>
+          )}
         </div>
+
+        {colMenu && (
+          <div class="ctx-menu" style={{ left: `${colMenu.x}px`, top: `${colMenu.y}px` }}>
+            <button
+              class="ctx-item"
+              onClick={() => {
+                setColRenameVal(colMenu.key);
+                setColRenaming(colMenu.key);
+                setColMenu(null);
+              }}
+            >
+              Rename column
+            </button>
+            <button class="ctx-item danger" onClick={() => deleteColumn(colMenu.key)}>
+              Delete column
+            </button>
+          </div>
+        )}
 
         {menu && (
           <div class="ctx-menu" style={{ left: `${menu.x}px`, top: `${menu.y}px` }}>
@@ -633,6 +784,7 @@ export default function TasksTab({
           <TaskDetail
             task={selected.task}
             currentKey={selected.key}
+            columns={board.columns.map((c) => c.key)}
             onSave={(f) => {
               updateTask(selected.task, f);
               commit();

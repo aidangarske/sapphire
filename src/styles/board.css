@@ -36,6 +36,38 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
+.board-add-col {
+  flex: 0 0 200px;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  padding: 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.board-add-col:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.board-add-input {
+  width: 100%;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.board-add-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .board-col-head {
   flex: none;
   display: flex;
@@ -163,6 +195,11 @@
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border-radius: 4px;
   padding: 1px 6px;
+}
+
+.tag.review {
+  color: #e6b800;
+  background: color-mix(in srgb, #e6b800 18%, transparent);
 }
 
 .card-pr {

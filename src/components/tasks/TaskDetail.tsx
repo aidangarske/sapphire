@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { X, Trash2 } from "lucide-preact";
-import { COLUMN_KEYS, ColumnKey, Task } from "../../lib/taskParser";
+import { ColumnKey, Task } from "../../lib/taskParser";
 
 function titleText(t: Task): string {
   return t.title
@@ -12,6 +12,7 @@ function titleText(t: Task): string {
 export default function TaskDetail({
   task,
   currentKey,
+  columns,
   onSave,
   onMove,
   onDelete,
@@ -19,6 +20,7 @@ export default function TaskDetail({
 }: {
   task: Task;
   currentKey: ColumnKey;
+  columns: ColumnKey[];
   onSave: (f: { text: string; tags: string[]; body: string }) => void;
   onMove: (key: ColumnKey) => void;
   onDelete: () => void;
@@ -63,7 +65,7 @@ export default function TaskDetail({
           value={key}
           onChange={(e) => setKey(e.currentTarget.value as ColumnKey)}
         >
-          {COLUMN_KEYS.map((k) => (
+          {columns.map((k) => (
             <option value={k} key={k}>
               {k}
             </option>

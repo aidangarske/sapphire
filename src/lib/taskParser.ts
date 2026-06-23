@@ -1,5 +1,7 @@
+// Columns are user-editable, so a key is any heading text. COLUMN_KEYS is only
+// the default set seeded into a blank board.
 export const COLUMN_KEYS = ["Todo", "In Progress", "Blocked", "Done", "Want To Do"] as const;
-export type ColumnKey = (typeof COLUMN_KEYS)[number];
+export type ColumnKey = string;
 
 export interface Task {
   lines: string[]; // verbatim source lines (each retains its terminator)
@@ -27,7 +29,7 @@ export interface Board {
   columns: Column[];
 }
 
-const HEADING = /^##\s+(Todo|In Progress|Blocked|Done|Want To Do)\s*$/;
+const HEADING = /^##\s+(.+?)\s*$/;
 const TASK = /^(\s*)-\s+\[([ xX])\]\s?(.*)$/;
 const META = /^\s*-\s*(pr|project|due|color):\s*(.*\S)\s*$/;
 
@@ -154,13 +156,40 @@ export function moveTask(board: Board, task: Task, toKey: ColumnKey, index: numb
   return board;
 }
 
+// Seed the default columns only into a board that has none yet, so user-added or
+// deleted columns are respected on every later load.
 export function ensureColumns(board: Board): Board {
+  if (board.columns.length > 0) return board;
   for (const key of COLUMN_KEYS) {
-    if (!board.columns.find((c) => c.key === key)) {
-      board.columns.push({ key, heading: `\n## ${key}\n`, nodes: [] });
-    }
+    board.columns.push({ key, heading: `\n## ${key}\n`, nodes: [] });
   }
   return board;
+}
+
+export function addColumn(board: Board, name: string): Column | null {
+  const key = name.trim();
+  if (!key || board.columns.some((c) => c.key.toLowerCase() === key.toLowerCase())) return null;
+  const column: Column = { key, heading: `\n## ${key}\n`, nodes: [] };
+  board.columns.push(column);
+  return column;
+}
+
+export function renameColumn(board: Board, key: ColumnKey, name: string): boolean {
+  const next = name.trim();
+  const col = board.columns.find((c) => c.key === key);
+  if (!col || !next) return false;
+  if (board.columns.some((c) => c !== col && c.key.toLowerCase() === next.toLowerCase())) {
+    return false;
+  }
+  const lead = col.heading.match(/^\n*/)?.[0] ?? "";
+  col.key = next;
+  col.heading = `${lead}## ${next}\n`;
+  return true;
+}
+
+export function removeColumn(board: Board, key: ColumnKey): void {
+  const i = board.columns.findIndex((c) => c.key === key);
+  if (i >= 0) board.columns.splice(i, 1);
 }
 
 export function updateTask(
