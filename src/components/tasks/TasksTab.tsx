@@ -1,6 +1,6 @@
 import { useRef, useState } from "preact/hooks";
 import { useEffect } from "preact/hooks";
-import { Plus } from "lucide-preact";
+import { Plus, X } from "lucide-preact";
 import {
   Board,
   ColumnKey,
@@ -47,6 +47,12 @@ const COLORS = [
 const colorHex = (name?: string) => COLORS.find((c) => c.name === name)?.hex;
 
 const prNumber = (url: string) => url.match(/\/pull\/(\d+)/)?.[1] ?? "";
+
+const bareTitle = (title: string) =>
+  title
+    .replace(/#[\w-]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 function renderTitle(text: string) {
@@ -101,6 +107,8 @@ export default function TasksTab({
     null,
   );
   const [selected, setSelected] = useState<{ task: Task; key: ColumnKey } | null>(null);
+  const [completing, setCompleting] = useState<{ task: Task; key: ColumnKey } | null>(null);
+  const [completeNote, setCompleteNote] = useState("");
   const [logMsg, setLogMsg] = useState("");
   const [boards, setBoards] = useState<BoardFile[]>([]);
   const [activeFile, setActiveFile] = useState<string>(getActiveBoardFile());
@@ -257,14 +265,35 @@ export default function TasksTab({
     const b = boardRef.current;
     if (!b) return;
     if (!t.checked) {
-      if (key === "Done") toggleTask(b, t);
-      else moveTask(b, t, "Done", countOf("Done"));
-      logActivity("done", t.title, t.body || undefined, t.pr);
-    } else {
-      if (key === "Done") moveTask(b, t, "Todo", 0);
-      else toggleTask(b, t);
+      setCompleteNote("");
+      setCompleting({ task: t, key });
+      return;
     }
+    if (key === "Done") moveTask(b, t, "Todo", 0);
+    else toggleTask(b, t);
     commit();
+  }
+
+  function confirmComplete() {
+    const b = boardRef.current;
+    if (!b || !completing) return;
+    const { task: t, key } = completing;
+    const note = completeNote.trim();
+    if (note) {
+      const body = t.body ? `${t.body}\n${note}` : note;
+      updateTask(t, { text: bareTitle(t.title), tags: t.tags, body });
+    }
+    if (key === "Done") toggleTask(b, t);
+    else moveTask(b, t, "Done", countOf("Done"));
+    logActivity("done", t.title, t.body || undefined, t.pr);
+    setCompleting(null);
+    setCompleteNote("");
+    commit();
+  }
+
+  function cancelComplete() {
+    setCompleting(null);
+    setCompleteNote("");
   }
 
   function onAdd(key: ColumnKey) {
@@ -776,6 +805,41 @@ export default function TasksTab({
                   onClick={() => setColor(menu.task, c.name)}
                 />
               ))}
+            </div>
+          </div>
+        )}
+
+        {completing && (
+          <div class="modal-backdrop" onClick={cancelComplete}>
+            <div class="modal note-modal" onClick={(e) => e.stopPropagation()}>
+              <div class="modal-head">
+                <span class="note-modal-title">Complete “{bareTitle(completing.task.title)}”</span>
+                <button class="icon-btn" onClick={cancelComplete} title="Cancel">
+                  <X size={16} />
+                </button>
+              </div>
+              <textarea
+                class="modal-notes"
+                rows={4}
+                ref={(el) => el?.focus()}
+                placeholder="Add a note (optional). Enter to save & complete, Shift+Enter for a new line."
+                value={completeNote}
+                onInput={(e) => setCompleteNote(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    confirmComplete();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelComplete();
+                  }
+                }}
+              />
+              <div class="modal-actions">
+                <button class="btn" onClick={confirmComplete}>
+                  Save &amp; complete
+                </button>
+              </div>
             </div>
           </div>
         )}

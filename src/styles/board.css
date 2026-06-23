@@ -282,6 +282,17 @@
   margin-bottom: 12px;
 }
 
+.note-modal-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .modal-title {
   flex: 1;
   min-width: 0;

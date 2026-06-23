@@ -9,7 +9,7 @@ export NVM_DIR="$HOME/.nvm"
 cd "$(dirname "$0")/.."
 
 npm install
-npm run tauri build
+npm run tauri -- build --bundles app
 
 APP=$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name "*.app" | head -1)
 DMG=$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name "*.dmg" 2>/dev/null | head -1)
