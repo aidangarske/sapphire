@@ -100,7 +100,7 @@
   font-family: var(--font);
   font-size: 16px;
   line-height: 1.65;
-  color: var(--text);
+  color: var(--note-text);
   max-width: 720px;
 }
 

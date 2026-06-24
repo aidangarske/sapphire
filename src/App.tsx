@@ -3,7 +3,6 @@ import {
   NotebookPen,
   SquareKanban,
   GitPullRequest,
-  CalendarDays,
   Settings as SettingsIcon,
   FolderOpen,
 } from "lucide-preact";
@@ -12,7 +11,6 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import NotesTab from "./components/notes/NotesTab";
 import TasksTab from "./components/tasks/TasksTab";
 import PRList from "./components/prs/PRList";
-import CalendarTab from "./components/calendar/CalendarTab";
 import Settings from "./components/Settings";
 import {
   appendDailyNote,
@@ -25,18 +23,17 @@ import {
 import { buildDaily, clearDate, dateStr, datesWithActivity, getDailyNoteName } from "./lib/journal";
 import { Pr, githubStatus } from "./lib/github";
 import { runWatcherTick } from "./lib/watcher";
-import { wireNotificationClicks, ensurePermission, getNotifySettings, notify } from "./lib/notify";
-import { CalEvent, calendarReady, fetchEvents } from "./lib/calendar";
+import { wireNotificationClicks, ensurePermission } from "./lib/notify";
+import { Layout, getMainLayout, getListLayout } from "./lib/theme";
 
 const POLL_MS = 60 * 1000;
 
-type Tab = "notes" | "tasks" | "prs" | "calendar" | "settings";
+type Tab = "notes" | "tasks" | "prs" | "settings";
 
 const TABS: { id: Tab; label: string; icon: typeof NotebookPen }[] = [
   { id: "notes", label: "Notes", icon: NotebookPen },
   { id: "tasks", label: "Tasks", icon: SquareKanban },
   { id: "prs", label: "Pull Requests", icon: GitPullRequest },
-  { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -50,14 +47,27 @@ export default function App() {
     const v = Number(localStorage.getItem("sapphire.listW"));
     return v >= 160 && v <= 560 ? v : 260;
   });
+  const [mainLayout, setMainLayout] = useState<Layout>(getMainLayout());
+  const [listLayout, setListLayout] = useState<Layout>(getListLayout());
 
   useEffect(() => {
     localStorage.setItem("sapphire.listW", String(listW));
   }, [listW]);
 
+  useEffect(() => {
+    const onLayout = () => {
+      setMainLayout(getMainLayout());
+      setListLayout(getListLayout());
+    };
+    window.addEventListener("sapphire:layout", onLayout);
+    return () => window.removeEventListener("sapphire:layout", onLayout);
+  }, []);
+
   function startResize(e: PointerEvent) {
     e.preventDefault();
-    const move = (ev: PointerEvent) => setListW(Math.min(560, Math.max(160, ev.clientX - 56)));
+    const base = mainLayout === "horizontal" ? 0 : 56;
+    const move = (ev: PointerEvent) =>
+      setListW(Math.min(560, Math.max(160, ev.clientX - base)));
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
@@ -135,50 +145,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    let fetchId: number | undefined;
-    let checkId: number | undefined;
-    let events: CalEvent[] = [];
-    const notified = new Set<string>();
-    const refetch = async () => {
-      try {
-        events = await fetchEvents(2);
-      } catch {
-        /* offline / not signed in — try next cycle */
-      }
-    };
-    const check = () => {
-      const s = getNotifySettings();
-      if (!s.calendar) return;
-      const now = Date.now();
-      const lead = s.leadMin * 60000;
-      for (const e of events) {
-        if (e.allDay) continue;
-        const dt = e.start - now;
-        if (dt > 0 && dt <= lead && !notified.has(e.uid)) {
-          notified.add(e.uid);
-          notify({
-            title: `⏰ ${e.summary}`,
-            body: `Starts in ${Math.max(1, Math.round(dt / 60000))} min`,
-            url: e.url,
-          });
-        }
-      }
-    };
-    calendarReady().then((ready) => {
-      if (!ready || cancelled) return;
-      refetch();
-      fetchId = window.setInterval(refetch, 5 * 60000);
-      checkId = window.setInterval(check, 60000);
-    });
-    return () => {
-      cancelled = true;
-      clearInterval(fetchId);
-      clearInterval(checkId);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!ws) return;
     setWsReady(false);
     initWorkspace(ws)
@@ -218,22 +184,18 @@ export default function App() {
   }
 
   return (
-    <div class="app" style={{ "--list-w": `${listW}px` } as any}>
+    <div
+      class={`app main-${mainLayout} list-${listLayout}`}
+      style={{ "--list-w": `${listW}px` } as any}
+    >
       <div
         class="list-resizer"
-        style={{ left: `calc(var(--rail-w) + ${listW}px)` }}
+        style={{
+          left: mainLayout === "horizontal" ? `${listW}px` : `calc(var(--rail-w) + ${listW}px)`,
+        }}
         onPointerDown={startResize}
       />
-      <nav class="rail">
-        <div class="rail-brand" title="Sapphire">
-          <svg viewBox="104 104 816 816" width="30" height="30" aria-hidden="true">
-            <polygon points="360,300 512,300 512,455 270,455" fill="#2f6fd6" />
-            <polygon points="512,300 664,300 754,455 512,455" fill="#5097ff" />
-            <polygon points="270,455 512,455 512,760" fill="#1b4aa6" />
-            <polygon points="512,455 754,455 512,760" fill="#2c66cf" />
-            <polygon points="360,300 664,300 612,343 412,343" fill="#7fb6ff" />
-          </svg>
-        </div>
+      <nav class={`rail rail-${mainLayout}`}>
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -242,6 +204,7 @@ export default function App() {
             onClick={() => setTab(id)}
           >
             <Icon size={20} />
+            <span class="rail-label">{label}</span>
           </button>
         ))}
       </nav>
@@ -283,8 +246,6 @@ export default function App() {
         <TasksTab ws={ws} onOpenNote={openNote} />
       ) : tab === "prs" ? (
         <PRList onCreateTask={createTask} />
-      ) : tab === "calendar" ? (
-        <CalendarTab ws={ws} />
       ) : (
         <Settings />
       )}

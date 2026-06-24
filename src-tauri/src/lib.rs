@@ -1,4 +1,3 @@
-mod gcal;
 mod github;
 
 use serde::Serialize;
@@ -267,65 +266,6 @@ async fn github_prs_merged(urls: Vec<String>) -> Result<Vec<String>, String> {
         .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-async fn google_status() -> String {
-    tauri::async_runtime::spawn_blocking(gcal::status)
-        .await
-        .unwrap_or_else(|_| "not-authed".into())
-}
-
-#[tauri::command]
-async fn google_calendar(
-    time_min: String,
-    time_max: String,
-) -> Result<Vec<gcal::RawEvent>, String> {
-    tauri::async_runtime::spawn_blocking(move || gcal::events(time_min, time_max))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-async fn google_oauth_login(client_id: String, client_secret: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || gcal::oauth_login(client_id, client_secret))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-async fn fetch_ics(url: String) -> Result<String, String> {
-    if !url.starts_with("https://") {
-        return Err("iCal URL must be https".into());
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        use std::io::Write;
-        const MAX_ICS_BYTES: usize = 5 * 1024 * 1024;
-        let cfg = format!(
-            "silent\nfail\nlocation\nproto = \"=https\"\nmax-redirs = 3\nmax-time = 20\nmax-filesize = {}\nurl = \"{}\"\n",
-            MAX_ICS_BYTES,
-            url.replace('\\', "\\\\").replace('"', "\\\"")
-        );
-        let mut child = std::process::Command::new("curl")
-            .args(["-K", "-"])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        let mut si = child.stdin.take().ok_or("no stdin")?;
-        si.write_all(cfg.as_bytes()).map_err(|e| e.to_string())?;
-        drop(si);
-        let out = child.wait_with_output().map_err(|e| e.to_string())?;
-        if !out.status.success() {
-            return Err("network error".into());
-        }
-        if out.stdout.len() > MAX_ICS_BYTES {
-            return Err("iCal response too large".into());
-        }
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
 /// Post a macOS notification that opens `url` when the banner is clicked.
 /// Uses mac-notification-sys directly because the notification plugin's desktop
 /// banner has no click callback. Returns true when handled natively.
@@ -381,6 +321,50 @@ fn find_repo_dir() -> Option<String> {
     None
 }
 
+#[derive(Serialize)]
+struct UpdateStatus {
+    behind: u32,
+    ahead: u32,
+    current: String,
+    latest: String,
+    subject: String,
+}
+
+/// Fetch from origin and report how far the local checkout is behind/ahead of
+/// its upstream branch, so the UI can say whether an update is available.
+#[tauri::command]
+fn app_update_check(repo_dir: String) -> Result<UpdateStatus, String> {
+    let dir = std::path::PathBuf::from(expand_home(&repo_dir));
+    if !dir.join(".git").exists() {
+        return Err(format!("Not a git checkout: {}", dir.display()));
+    }
+    let git = |args: &[&str]| -> Result<String, String> {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+    let branch = git(&["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_else(|_| "main".into());
+    git(&["fetch", "--quiet", "origin"])?;
+    let upstream = format!("origin/{}", branch);
+    let counts = git(&["rev-list", "--left-right", "--count", &format!("HEAD...{}", upstream)])?;
+    let mut parts = counts.split_whitespace();
+    let ahead = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let behind = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    Ok(UpdateStatus {
+        behind,
+        ahead,
+        current: git(&["rev-parse", "--short", "HEAD"]).unwrap_or_default(),
+        latest: git(&["rev-parse", "--short", &upstream]).unwrap_or_default(),
+        subject: git(&["log", "-1", "--pretty=%s", &upstream]).unwrap_or_default(),
+    })
+}
+
 /// Pull latest from GitHub and rebuild/reinstall the app, streaming output via
 /// the `app-update-log` event and finishing with `app-update-done` (bool ok).
 #[tauri::command]
@@ -431,6 +415,33 @@ fn app_relaunch(app: AppHandle) {
     app.restart();
 }
 
+/// Recolor the macOS Dock / Cmd-Tab icon at runtime to match the chosen theme.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn set_dock_icon(app: AppHandle, png: Vec<u8>) -> Result<(), String> {
+    app.run_on_main_thread(move || {
+        use objc2::{AllocAnyThread, MainThreadMarker};
+        use objc2_app_kit::{NSApplication, NSImage};
+        use objc2_foundation::NSData;
+        let mtm = match MainThreadMarker::new() {
+            Some(m) => m,
+            None => return,
+        };
+        let data = NSData::with_bytes(&png);
+        let img = unsafe { NSImage::initWithData(NSImage::alloc(), &data) };
+        if let Some(img) = img {
+            unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&img)) };
+        }
+    })
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn set_dock_icon(_png: Vec<u8>) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -451,14 +462,12 @@ pub fn run() {
             github_account,
             github_prs,
             github_prs_merged,
-            fetch_ics,
             notify_open,
-            google_status,
-            google_calendar,
-            google_oauth_login,
             find_repo_dir,
+            app_update_check,
             app_update,
-            app_relaunch
+            app_relaunch,
+            set_dock_icon
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

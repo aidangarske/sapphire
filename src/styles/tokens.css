@@ -5,6 +5,7 @@
   --bg-3: #273141;
   --border: #2b3647;
   --text: #eef2f8;
+  --note-text: var(--text);
   --muted: #9aa6b8;
   --accent: #2f81f7;
   --accent-hi: #5aa2ff;
@@ -14,6 +15,8 @@
   --bad: #f85149;
 
   --rail-w: 56px;
+  --bar-h: 48px;
+  --strip-h: 46px;
   --list-w: 260px;
   --strip-w: 260px;
   --radius: 8px;

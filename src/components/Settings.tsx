@@ -1,7 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { Account, githubAccount, githubStatus } from "../lib/github";
 import { getWorkspace } from "../lib/store";
-import { getGoogleClient, getIcalUrl, setGoogleClient, setIcalUrl } from "../lib/calendar";
 import { getDailyNoteName, setDailyNoteName } from "../lib/journal";
 import { NotifySettings, getNotifySettings, setNotifySettings } from "../lib/notify";
 import {
@@ -11,20 +10,31 @@ import {
 } from "@tauri-apps/plugin-notification";
 import { runWatcherTick } from "../lib/watcher";
 import {
+  UpdateStatus,
+  checkUpdate,
   findRepoDir,
   getRepoDir,
   relaunchApp,
   runUpdate,
   setRepoDir as storeRepoDir,
 } from "../lib/updater";
+import {
+  Layout,
+  NOTE_TEXT_CHOICES,
+  THEMES,
+  getListLayout,
+  getMainLayout,
+  getNoteText,
+  getThemeId,
+  setListLayout,
+  setMainLayout,
+  setNoteText,
+  setThemeId,
+} from "../lib/theme";
 
 export default function Settings() {
   const [status, setStatus] = useState<string>("");
   const [account, setAccount] = useState<Account | null>(null);
-  const [ical, setIcal] = useState(getIcalUrl());
-  const [calMsg, setCalMsg] = useState("");
-  const [gclient, setGclient] = useState(getGoogleClient());
-  const [gMsg, setGMsg] = useState("");
   const [notif, setNotif] = useState<NotifySettings>(getNotifySettings());
   const [notifMsg, setNotifMsg] = useState("");
   const [dailyNote, setDailyNote] = useState(getDailyNoteName());
@@ -33,6 +43,52 @@ export default function Settings() {
   const [updateLog, setUpdateLog] = useState<string[]>([]);
   const [updating, setUpdating] = useState(false);
   const [updateOk, setUpdateOk] = useState<boolean | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [statusErr, setStatusErr] = useState("");
+
+  async function doCheck() {
+    const dir = repoDir.trim();
+    if (!dir) {
+      setStatusErr("Set the path to your Sapphire source checkout first.");
+      return;
+    }
+    storeRepoDir(dir);
+    setChecking(true);
+    setStatusErr("");
+    setUpdateStatus(null);
+    try {
+      setUpdateStatus(await checkUpdate(dir));
+    } catch (e) {
+      setStatusErr(String(e));
+    } finally {
+      setChecking(false);
+    }
+  }
+  const [themeId, setThemeState] = useState(getThemeId());
+  const [mainLayout, setMainLayoutState] = useState<Layout>(getMainLayout());
+  const [listLayout, setListLayoutState] = useState<Layout>(getListLayout());
+  const [noteText, setNoteTextState] = useState(getNoteText());
+
+  function pickNoteText(value: string) {
+    setNoteTextState(value);
+    setNoteText(value);
+  }
+
+  function pickTheme(id: string) {
+    setThemeState(id);
+    setThemeId(id);
+  }
+
+  function pickMain(l: Layout) {
+    setMainLayoutState(l);
+    setMainLayout(l);
+  }
+
+  function pickList(l: Layout) {
+    setListLayoutState(l);
+    setListLayout(l);
+  }
 
   async function doUpdate() {
     const dir = repoDir.trim();
@@ -58,11 +114,6 @@ export default function Settings() {
   function saveDaily() {
     setDailyNoteName(dailyNote);
     setDailyMsg(`Daily log will append to "${dailyNote.trim() || "Daily Notes"}".`);
-  }
-
-  function saveGoogle() {
-    setGoogleClient(gclient);
-    setGMsg("Saved. Now click Sign in on the Calendar tab.");
   }
 
   function updateNotif(patch: Partial<NotifySettings>) {
@@ -107,11 +158,6 @@ export default function Settings() {
     if (!getRepoDir()) findRepoDir().then((d) => d && setRepoDir(d));
   }, []);
 
-  function saveCalendar() {
-    setIcalUrl(ical);
-    setCalMsg("Saved. Open the Calendar tab (Cmd+4).");
-  }
-
   return (
     <>
       <aside class="list">
@@ -119,6 +165,88 @@ export default function Settings() {
       </aside>
       <main class="main settings-main">
         <div class="settings">
+          <section class="settings-card">
+          <h2>Appearance</h2>
+          <p class="settings-help">
+            Pick a skin to recolor the whole app. Changes apply instantly.
+          </p>
+          <div class="theme-grid">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                class={`theme-card${themeId === t.id ? " active" : ""}`}
+                title={t.name}
+                onClick={() => pickTheme(t.id)}
+              >
+                <div class="theme-swatches">
+                  <span style={{ background: t.vars["bg-0"] }} />
+                  <span style={{ background: t.vars["bg-2"] }} />
+                  <span style={{ background: t.vars["accent"] }} />
+                  <span style={{ background: t.vars["ok"] }} />
+                  <span style={{ background: t.vars["bad"] }} />
+                </div>
+                <span class="theme-name">{t.name}</span>
+              </button>
+            ))}
+          </div>
+
+          <h3 class="settings-sub">Layout</h3>
+          <p class="settings-help">
+            Orient the main navigation and the secondary list (notes list, task boards, PR
+            categories) independently.
+          </p>
+          <div class="layout-grid">
+            <span class="layout-label">Main nav</span>
+            <div class="seg">
+              <button
+                class={`seg-btn${mainLayout === "vertical" ? " active" : ""}`}
+                onClick={() => pickMain("vertical")}
+              >
+                Vertical
+              </button>
+              <button
+                class={`seg-btn${mainLayout === "horizontal" ? " active" : ""}`}
+                onClick={() => pickMain("horizontal")}
+              >
+                Horizontal
+              </button>
+            </div>
+            <span class="layout-label">Secondary list</span>
+            <div class="seg">
+              <button
+                class={`seg-btn${listLayout === "vertical" ? " active" : ""}`}
+                onClick={() => pickList("vertical")}
+              >
+                Vertical
+              </button>
+              <button
+                class={`seg-btn${listLayout === "horizontal" ? " active" : ""}`}
+                onClick={() => pickList("horizontal")}
+              >
+                Horizontal
+              </button>
+            </div>
+          </div>
+
+          <h3 class="settings-sub">Note text</h3>
+          <p class="settings-help">Brighten or recolor the note reading/editing text.</p>
+          <div class="seg">
+            {NOTE_TEXT_CHOICES.map((c) => (
+              <button
+                key={c.id}
+                class={`seg-btn${noteText === c.value ? " active" : ""}`}
+                onClick={() => pickNoteText(c.value)}
+              >
+                {c.value ? (
+                  <span class="note-text-dot" style={{ background: c.value }} />
+                ) : null}
+                {c.label}
+              </button>
+            ))}
+          </div>
+          </section>
+
+          <section class="settings-card">
           <h2>GitHub</h2>
           {status === "ok" && account ? (
             <p class="settings-help">
@@ -136,7 +264,10 @@ export default function Settings() {
             </p>
           )}
 
-          <h2 style={{ marginTop: "30px" }}>Notifications</h2>
+          </section>
+
+          <section class="settings-card">
+          <h2>Notifications</h2>
           <p class="settings-help">
             Choose what to be alerted about. (macOS delivers these in the built app — not in{" "}
             <code>tauri dev</code>.)
@@ -174,26 +305,6 @@ export default function Settings() {
               />
               Changes requested on my PR
             </label>
-            <label class="notif-row">
-              <input
-                type="checkbox"
-                checked={notif.calendar}
-                onChange={(e) => updateNotif({ calendar: e.currentTarget.checked })}
-              />
-              Calendar event reminders
-            </label>
-            <label class="notif-row">
-              Remind
-              <input
-                class="notif-num"
-                type="number"
-                min={1}
-                max={120}
-                value={notif.leadMin}
-                onInput={(e) => updateNotif({ leadMin: Number(e.currentTarget.value) || 15 })}
-              />
-              min before events
-            </label>
           </div>
           <button class="btn" style={{ marginTop: "12px" }} onClick={testNotify}>
             Send test notification
@@ -203,7 +314,10 @@ export default function Settings() {
           </button>
           {notifMsg && <div class="settings-msg">{notifMsg}</div>}
 
-          <h2 style={{ marginTop: "30px" }}>Daily log</h2>
+          </section>
+
+          <section class="settings-card">
+          <h2>Daily log</h2>
           <p class="settings-help">
             Board activity (done / blocked / in progress) is appended to this note each day. Name it
             whatever your daily note is called — it's created if it doesn't exist.
@@ -220,49 +334,10 @@ export default function Settings() {
           </div>
           {dailyMsg && <div class="settings-msg">{dailyMsg}</div>}
 
-          <h2 style={{ marginTop: "30px" }}>Google Calendar</h2>
-          <p class="settings-help">
-            Create a Google OAuth <b>Desktop</b> client (Google Cloud Console → APIs &amp; Services
-            → Credentials → OAuth client ID → Desktop app) and enable the <b>Calendar API</b>. Paste
-            its ID and secret, then click <b>Sign in</b> on the Calendar tab. Stored locally.
-          </p>
-          <div class="settings-row">
-            <input
-              placeholder="OAuth Client ID"
-              value={gclient.clientId}
-              onInput={(e) => setGclient({ ...gclient, clientId: e.currentTarget.value })}
-            />
-          </div>
-          <div class="settings-row" style={{ marginTop: "8px" }}>
-            <input
-              type="password"
-              placeholder="OAuth Client secret"
-              value={gclient.clientSecret}
-              onInput={(e) => setGclient({ ...gclient, clientSecret: e.currentTarget.value })}
-            />
-            <button class="btn" onClick={saveGoogle}>
-              Save
-            </button>
-          </div>
-          {gMsg && <div class="settings-msg">{gMsg}</div>}
+          </section>
 
-          <p class="settings-help" style={{ marginTop: "16px" }}>
-            Or, for a <b>personal</b> calendar, paste a secret iCal URL instead:
-          </p>
-          <div class="settings-row">
-            <input
-              type="password"
-              placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-              value={ical}
-              onInput={(e) => setIcal(e.currentTarget.value)}
-            />
-            <button class="btn" onClick={saveCalendar}>
-              Save
-            </button>
-          </div>
-          {calMsg && <div class="settings-msg">{calMsg}</div>}
-
-          <h2 style={{ marginTop: "30px" }}>App updates</h2>
+          <section class="settings-card">
+          <h2>App updates</h2>
           <p class="settings-help">
             Pulls the latest code from GitHub and rebuilds Sapphire, replacing the copy in{" "}
             <code>/Applications</code>. Needs your local source checkout plus the Node and Rust
@@ -274,10 +349,28 @@ export default function Settings() {
               value={repoDir}
               onInput={(e) => setRepoDir(e.currentTarget.value)}
             />
+            <button class="btn ghost" onClick={doCheck} disabled={checking || updating}>
+              {checking ? "Checking…" : "Check for updates"}
+            </button>
             <button class="btn" onClick={doUpdate} disabled={updating}>
               {updating ? "Updating…" : "Update now"}
             </button>
           </div>
+          {updateStatus &&
+            (updateStatus.behind > 0 ? (
+              <div class="settings-msg update-avail">
+                Update available — {updateStatus.behind} commit
+                {updateStatus.behind === 1 ? "" : "s"} behind ({updateStatus.current} →{" "}
+                {updateStatus.latest}). Latest: {updateStatus.subject}
+              </div>
+            ) : (
+              <div class="settings-msg">
+                Up to date ({updateStatus.current}).
+                {updateStatus.ahead > 0 &&
+                  ` You're ${updateStatus.ahead} commit${updateStatus.ahead === 1 ? "" : "s"} ahead of origin.`}
+              </div>
+            ))}
+          {statusErr && <div class="settings-msg update-err">{statusErr}</div>}
           {updateLog.length > 0 && <pre class="update-log">{updateLog.join("\n")}</pre>}
           {updateOk === true && (
             <div class="settings-msg">
@@ -291,8 +384,12 @@ export default function Settings() {
             <div class="settings-msg">Update did not complete — see the log above.</div>
           )}
 
-          <h2 style={{ marginTop: "30px" }}>Workspace</h2>
+          </section>
+
+          <section class="settings-card">
+          <h2>Workspace</h2>
           <p class="settings-help">{getWorkspace() ?? "No workspace selected."}</p>
+          </section>
         </div>
       </main>
     </>

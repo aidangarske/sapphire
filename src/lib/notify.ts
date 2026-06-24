@@ -10,8 +10,6 @@ export interface NotifySettings {
   prFixed: boolean;
   prReviewRequested: boolean;
   prChangesRequested: boolean;
-  calendar: boolean;
-  leadMin: number;
 }
 
 const KEY = "sapphire.notify";
@@ -21,8 +19,6 @@ const DEFAULTS: NotifySettings = {
   prFixed: true,
   prReviewRequested: true,
   prChangesRequested: true,
-  calendar: true,
-  leadMin: 15,
 };
 
 export function getNotifySettings(): NotifySettings {

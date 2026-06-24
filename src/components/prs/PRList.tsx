@@ -144,7 +144,7 @@ export default function PRList({ onCreateTask }: { onCreateTask: (p: Pr) => void
 
   if (status !== undefined && status !== "ok") {
     return (
-      <main class="main" style={{ gridColumn: "2 / 4" }}>
+      <main class="main main-wide">
         <Login status={status as "not-authed" | "gh-missing"} onRecheck={init} />
       </main>
     );
@@ -152,7 +152,7 @@ export default function PRList({ onCreateTask }: { onCreateTask: (p: Pr) => void
 
   if (!prs) {
     return (
-      <main class="main" style={{ gridColumn: "2 / 4" }}>
+      <main class="main main-wide">
         <div class="placeholder">Loading PRs…</div>
       </main>
     );

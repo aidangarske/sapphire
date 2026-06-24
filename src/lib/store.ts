@@ -222,17 +222,6 @@ export async function appendDailyNote(ws: string, noteName: string, text: string
   await writeNote(path, body + text);
 }
 
-export async function addBoardTask(
-  ws: string,
-  title: string,
-  meta?: { due?: string },
-): Promise<void> {
-  const path = boardPath(ws);
-  const board = ensureColumns(parseBoard(await readNote(path)));
-  if (!addTask(board, "Todo", title, meta)) throw new Error("Todo column missing");
-  await writeNote(path, serializeBoard(board));
-}
-
 export async function createTaskFromPr(
   ws: string,
   pr: {

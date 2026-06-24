@@ -39,9 +39,8 @@ Pull Requests, your GitHub PRs grouped by what needs you, with CI status:
   numbers, tags, notes, and a per-PR "create task".
 - Pull Requests: your GitHub PRs via the `gh` CLI (no token to paste), grouped
   by Created, Needs attention, Review requested, and Assigned, with CI rollup.
-- Notifications: native macOS alerts on CI failed/fixed, review requested,
-  changes requested, and calendar reminders. Click to open the PR or Meet link.
-- Calendar: a day-view timeline of your Google Calendar (read-only).
+- Notifications: native macOS alerts on CI failed/fixed, review requested, and
+  changes requested. Click to open the PR.
 - Daily log: board activity is appended to a daily note automatically and on demand.
 
 ## Install (macOS)
@@ -60,7 +59,6 @@ First launch: right-click **Sapphire** in Applications, then **Open** (it's unsi
 
 - GitHub: run `gh auth login` in a terminal (uses the GitHub CLI, nothing to
   paste in the app).
-- Google Calendar: see [Docs/CALENDAR-SETUP.md](Docs/CALENDAR-SETUP.md).
 
 ## Develop
 
@@ -76,12 +74,12 @@ More detail in [Docs/DEVELOPMENT.md](Docs/DEVELOPMENT.md).
 ## Stack
 
 [Tauri v2](https://tauri.app) (system WebView, small and fast), Preact, TypeScript,
-Vite, and CodeMirror 6. Notes and tasks are plain Markdown; tokens are handled by
-`gh` and Google OAuth and stored locally.
+Vite, and CodeMirror 6. Notes and tasks are plain Markdown; GitHub auth is handled
+by the `gh` CLI.
 
 ## Shortcuts
 
-- Cmd+1 to 5: switch tabs. Cmd+N: new note.
+- Cmd+1 to 4: switch tabs. Cmd+N: new note.
 - Option+1 to 9 / Option+] [: jump or cycle notes.
 - Cmd+A: select all (in the editor).
 

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "A fast, simple, local-first dev workspace for Mac: Markdown notes, a task board, GitHub PRs, and Google Calendar.",
+  "description": "A fast, simple, local-first dev workspace for Mac: Markdown notes, a task board, and GitHub PRs.",
   "author": "Aidan Garske",
   "license": "MIT",
   "scripts": {
@@ -32,7 +32,6 @@
     "@tauri-apps/plugin-opener": "^2",
     "codemirror": "^6.0.2",
     "dompurify": "^3.4.11",
-    "ical.js": "^2.2.1",
     "lucide-preact": "^1.18.0",
     "markdown-it": "^14.2.0",
     "markdown-it-task-lists": "^2.1.1",

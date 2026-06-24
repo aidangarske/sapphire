@@ -8,6 +8,17 @@ export const setRepoDir = (dir: string) => localStorage.setItem(REPO_KEY, dir.tr
 export const findRepoDir = () => invoke<string | null>("find_repo_dir");
 export const relaunchApp = () => invoke("app_relaunch");
 
+export interface UpdateStatus {
+  behind: number;
+  ahead: number;
+  current: string;
+  latest: string;
+  subject: string;
+}
+
+export const checkUpdate = (repoDir: string) =>
+  invoke<UpdateStatus>("app_update_check", { repoDir });
+
 export async function runUpdate(
   repoDir: string,
   onLog: (line: string) => void,

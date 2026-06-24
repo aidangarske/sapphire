@@ -6,8 +6,8 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 
 const darkHighlight = HighlightStyle.define([
-  { tag: t.heading, color: "var(--text)", fontWeight: "700" },
-  { tag: t.strong, fontWeight: "700", color: "var(--text)" },
+  { tag: t.heading, color: "var(--note-text)", fontWeight: "700" },
+  { tag: t.strong, fontWeight: "700", color: "var(--note-text)" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through", color: "var(--muted)" },
   { tag: t.link, color: "var(--accent-hi)", textDecoration: "underline" },
@@ -24,7 +24,7 @@ const darkHighlight = HighlightStyle.define([
 
 const theme = EditorView.theme(
   {
-    "&": { height: "100%", backgroundColor: "transparent", color: "var(--text)" },
+    "&": { height: "100%", backgroundColor: "transparent", color: "var(--note-text)" },
     ".cm-scroller": {
       fontFamily: "var(--mono)",
       fontSize: "14px",

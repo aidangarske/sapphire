@@ -18,6 +18,16 @@ import {
 
 const MODES: EditorMode[] = ["raw", "rendered", "split"];
 
+const UNTITLED = /^Untitled \d+$/;
+
+function deriveTitle(text: string): string {
+  for (const line of text.split("\n")) {
+    const t = line.replace(/^#+\s*/, "").trim();
+    if (t) return t.replace(/[\/\\:]/g, "-").slice(0, 60).trim();
+  }
+  return "";
+}
+
 export default function NotesTab({
   ws,
   openId,
@@ -45,6 +55,8 @@ export default function NotesTab({
 
   const saver = useRef(createSaver(writeNote)).current;
   const searchTimer = useRef<number | undefined>(undefined);
+  const titleTimer = useRef<number | undefined>(undefined);
+  const autoTitle = useRef<Set<string>>(new Set());
   const drag = useRef<{ index: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
   const notesRef = useRef<OrderedNote[]>([]);
@@ -99,6 +111,33 @@ export default function NotesTab({
     setContent(text);
     if (!activePath) return;
     saver.schedule(activePath, text);
+    const name = (activePath.split("/").pop() ?? "").replace(/\.md$/, "");
+    if (autoTitle.current.has(activePath) || UNTITLED.test(name)) {
+      const path = activePath;
+      clearTimeout(titleTimer.current);
+      titleTimer.current = window.setTimeout(() => autoTitleNow(path, text), 600);
+    }
+  }
+
+  async function autoTitleNow(path: string, text: string) {
+    const title = deriveTitle(text);
+    if (!title) return;
+    const curName = (path.split("/").pop() ?? "").replace(/\.md$/, "");
+    if (title === curName) return;
+    const taken = new Set(
+      notesRef.current.filter((n) => n.path !== path).map((n) => n.name.replace(/\.md$/, "")),
+    );
+    if (taken.has(title)) return;
+    await saver.flush();
+    try {
+      const newPath = await renameNote(ws, path, title);
+      autoTitle.current.delete(path);
+      autoTitle.current.add(newPath);
+      if (activePathRef.current === path) setActivePath(newPath);
+      setNotes(await listOrderedNotes(ws));
+    } catch {
+      /* name clash or fs error — leave note as-is */
+    }
   }
 
   useEffect(
@@ -114,6 +153,7 @@ export default function NotesTab({
     let i = 1;
     while (taken.has(`Untitled ${i}`)) i++;
     const path = await createNote(ws, `Untitled ${i}`);
+    autoTitle.current.add(path);
     await refresh(path);
   }
 
@@ -130,6 +170,7 @@ export default function NotesTab({
     setRenaming(null);
     if (!val.trim()) return;
     await saver.flush();
+    autoTitle.current.delete(path);
     try {
       const newPath = await renameNote(ws, path, val);
       await refresh(newPath);
