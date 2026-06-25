@@ -442,6 +442,52 @@ fn set_dock_icon(_png: Vec<u8>) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct AppleNote {
+    title: String,
+    html: String,
+}
+
+/// One-way sync of notes into a dedicated "Sapphire" folder in Apple Notes.
+/// Upserts by title (creates the folder/note, or replaces an existing body).
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn apple_notes_sync(notes: Vec<AppleNote>) -> Result<u32, String> {
+    const SCRIPT: &str = r#"on run argv
+  set theTitle to item 1 of argv
+  set theBody to item 2 of argv
+  tell application "Notes"
+    if not (exists folder "Sapphire") then make new folder with properties {name:"Sapphire"}
+    set f to folder "Sapphire"
+    set matches to (notes of f whose name is theTitle)
+    if (count of matches) > 0 then
+      set body of (item 1 of matches) to theBody
+    else
+      make new note at f with properties {body:theBody}
+    end if
+  end tell
+end run"#;
+    let mut synced = 0u32;
+    for n in &notes {
+        let out = std::process::Command::new("osascript")
+            .args(["-e", SCRIPT, &n.title, &n.html])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if out.status.success() {
+            synced += 1;
+        } else {
+            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+        }
+    }
+    Ok(synced)
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn apple_notes_sync(_notes: Vec<AppleNote>) -> Result<u32, String> {
+    Ok(0)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -467,7 +513,8 @@ pub fn run() {
             app_update_check,
             app_update,
             app_relaunch,
-            set_dock_icon
+            set_dock_icon,
+            apple_notes_sync
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

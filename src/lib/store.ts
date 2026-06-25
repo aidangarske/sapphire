@@ -54,6 +54,26 @@ export interface BoardFile {
 export const getActiveBoardFile = () => localStorage.getItem(ACTIVE_BOARD_KEY) ?? "board.md";
 export const setActiveBoardFile = (f: string) => localStorage.setItem(ACTIVE_BOARD_KEY, f);
 
+// Empty the Done column of a board (default: the main "Daily" board). Done items
+// are already recorded in the daily note by the nightly journal flush, so this
+// just clears the cards for a fresh start. Returns how many were removed.
+export async function clearDoneColumn(ws: string, file = "board.md"): Promise<number> {
+  const path = `${tasksDir(ws)}/${file}`;
+  let board;
+  try {
+    board = parseBoard(await readNote(path));
+  } catch {
+    return 0;
+  }
+  const done = board.columns.find((c) => c.key === "Done");
+  if (!done) return 0;
+  const removed = tasksIn(done).length;
+  if (removed === 0) return 0;
+  done.nodes = [{ kind: "raw", text: "\n" }];
+  await writeNote(path, serializeBoard(board));
+  return removed;
+}
+
 export async function listBoards(ws: string): Promise<BoardFile[]> {
   const entries = await invoke<NoteEntry[]>("list_notes", { dir: tasksDir(ws) });
   const boards = entries.map((e) => ({

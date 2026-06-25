@@ -14,6 +14,7 @@ import PRList from "./components/prs/PRList";
 import Settings from "./components/Settings";
 import {
   appendDailyNote,
+  clearDoneColumn,
   createTaskFromPr,
   getWorkspace,
   initWorkspace,
@@ -25,6 +26,7 @@ import { Pr, githubStatus } from "./lib/github";
 import { runWatcherTick } from "./lib/watcher";
 import { wireNotificationClicks, ensurePermission } from "./lib/notify";
 import { Layout, getMainLayout, getListLayout } from "./lib/theme";
+import { getAppleSyncEnabled, syncToAppleNotes } from "./lib/appleSync";
 
 const POLL_MS = 60 * 1000;
 
@@ -155,6 +157,20 @@ export default function App() {
   useEffect(() => {
     if (!ws || !wsReady) return;
     let stop = false;
+    const run = () => {
+      if (!stop && getAppleSyncEnabled()) syncToAppleNotes(ws).catch(() => {});
+    };
+    run();
+    const id = window.setInterval(run, 60 * 60 * 1000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, [ws, wsReady]);
+
+  useEffect(() => {
+    if (!ws || !wsReady) return;
+    let stop = false;
     // Flush any day's activity older than "today" to the daily note. Runs on
     // launch, on window focus, and every few minutes so it also fires when the
     // app stays open across midnight (overnight) — not only on relaunch.
@@ -167,13 +183,26 @@ export default function App() {
         clearDate(d);
       }
     };
-    flushPast();
-    const id = window.setInterval(flushPast, 5 * 60 * 1000);
-    window.addEventListener("focus", flushPast);
+    // Empty the Daily board's Done column once per day so each morning starts
+    // fresh. Skips the very first run so existing dones aren't wiped on launch.
+    const clearDoneIfNewDay = async () => {
+      const today = dateStr(Date.now());
+      const last = localStorage.getItem("sapphire.lastDoneClear");
+      if (last === today) return;
+      if (last && !stop) await clearDoneColumn(ws);
+      localStorage.setItem("sapphire.lastDoneClear", today);
+    };
+    const tick = async () => {
+      await flushPast();
+      await clearDoneIfNewDay();
+    };
+    tick();
+    const id = window.setInterval(tick, 5 * 60 * 1000);
+    window.addEventListener("focus", tick);
     return () => {
       stop = true;
       clearInterval(id);
-      window.removeEventListener("focus", flushPast);
+      window.removeEventListener("focus", tick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws, wsReady]);

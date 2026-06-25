@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { Account, githubAccount, githubStatus } from "../lib/github";
 import { getWorkspace } from "../lib/store";
+import { getAppleSyncEnabled, setAppleSyncEnabled, syncToAppleNotes } from "../lib/appleSync";
 import { getDailyNoteName, setDailyNoteName } from "../lib/journal";
 import { NotifySettings, getNotifySettings, setNotifySettings } from "../lib/notify";
 import {
@@ -69,6 +70,33 @@ export default function Settings() {
   const [mainLayout, setMainLayoutState] = useState<Layout>(getMainLayout());
   const [listLayout, setListLayoutState] = useState<Layout>(getListLayout());
   const [noteText, setNoteTextState] = useState(getNoteText());
+  const [appleSync, setAppleSync] = useState(getAppleSyncEnabled());
+  const [appleMsg, setAppleMsg] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  async function doAppleSync() {
+    const ws = getWorkspace();
+    if (!ws) {
+      setAppleMsg("No workspace selected.");
+      return;
+    }
+    setSyncing(true);
+    setAppleMsg("Syncing to Apple Notes…");
+    try {
+      const n = await syncToAppleNotes(ws);
+      setAppleMsg(`Synced ${n} note${n === 1 ? "" : "s"} to the "Sapphire" folder in Apple Notes.`);
+    } catch (e) {
+      setAppleMsg(`Failed: ${String(e)}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function toggleAppleSync(on: boolean) {
+    setAppleSync(on);
+    setAppleSyncEnabled(on);
+    if (on) doAppleSync();
+  }
 
   function pickNoteText(value: string) {
     setNoteTextState(value);
@@ -333,6 +361,33 @@ export default function Settings() {
             </button>
           </div>
           {dailyMsg && <div class="settings-msg">{dailyMsg}</div>}
+
+          </section>
+
+          <section class="settings-card">
+          <h2>Apple Notes sync</h2>
+          <p class="settings-help">
+            Mirror your notes into a <b>Sapphire</b> folder in Apple Notes. One-way (Sapphire →
+            Apple Notes), refreshed on launch and hourly while enabled. macOS will ask for Notes
+            permission the first time.
+          </p>
+          <label class="notif-row">
+            <input
+              type="checkbox"
+              checked={appleSync}
+              onChange={(e) => toggleAppleSync(e.currentTarget.checked)}
+            />
+            Keep Apple Notes in sync
+          </label>
+          <button
+            class="btn"
+            style={{ marginTop: "12px" }}
+            onClick={doAppleSync}
+            disabled={syncing}
+          >
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
+          {appleMsg && <div class="settings-msg">{appleMsg}</div>}
 
           </section>
 
