@@ -80,7 +80,9 @@ export async function launchTui(): Promise<void> {
   enterAlt();
   const instance = render(
     <Root ws={ws} suspendAndEdit={suspendAndEdit} onReady={(fn) => (suspend = fn)} />,
-    { exitOnCtrlC: false, patchConsole: false },
+    // kittyKeyboard auto: terminals that support it (Ghostty, kitty) report the
+    // Cmd (super) modifier and Home/End, which the note editor maps to shortcuts.
+    { exitOnCtrlC: false, patchConsole: false, kittyKeyboard: { mode: "auto" } },
   );
 
   const cleanup = () => leaveAlt();

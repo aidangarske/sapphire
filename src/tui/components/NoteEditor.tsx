@@ -28,9 +28,10 @@ export function NoteEditor({
   const [state, setState] = useState<ed.EditorState>(() => ed.fromText(initial));
   const [dirty, setDirty] = useState(false);
   const [top, setTop] = useState(0);
+  const [gutter, setGutter] = useState(true);
 
   const viewH = Math.max(1, height - 2);
-  const gutterW = Math.max(2, String(state.lines.length).length);
+  const gutterW = gutter ? Math.max(2, String(state.lines.length).length) : 0;
   const viewW = Math.max(10, width - 4 - gutterW);
 
   const edit = (fn: (s: ed.EditorState) => ed.EditorState) => {
@@ -40,7 +41,9 @@ export function NoteEditor({
   const move = (fn: (s: ed.EditorState) => ed.EditorState) => setState((s) => fn(s));
 
   useInput((input, key) => {
-    if (key.ctrl && input === "s") {
+    // Treat Cmd (super, via the kitty protocol) the same as Ctrl for shortcuts.
+    const mod = key.ctrl || key.super;
+    if (mod && input === "s") {
       onSave(ed.toText(state));
       return;
     }
@@ -49,24 +52,29 @@ export function NoteEditor({
       else onCancel();
       return;
     }
-    if (key.ctrl && input === "q") {
+    if (mod && input === "q") {
       onCancel();
+      return;
+    }
+    if (mod && input === "g") {
+      setGutter((v) => !v);
       return;
     }
     if (key.leftArrow) return move(ed.moveLeft);
     if (key.rightArrow) return move(ed.moveRight);
     if (key.upArrow) return move(ed.moveUp);
     if (key.downArrow) return move(ed.moveDown);
-    if (key.ctrl && input === "a") return move(ed.moveHome);
-    if (key.ctrl && input === "e") return move(ed.moveEnd);
+    if (key.home || (mod && input === "a")) return move(ed.moveHome);
+    if (key.end || (mod && input === "e")) return move(ed.moveEnd);
     if (key.pageDown) return move((s) => ed.moveByRows(s, viewH - 1));
     if (key.pageUp) return move((s) => ed.moveByRows(s, -(viewH - 1)));
     if (key.return) return edit(ed.newline);
-    if ((key.ctrl && input === "w") || (key.backspace && key.meta)) return edit(ed.deleteWord);
+    if (key.backspace && (mod || key.meta)) return edit(mod ? ed.deleteToLineStart : ed.deleteWord);
+    if (mod && input === "w") return edit(ed.deleteWord);
     if (key.backspace) return edit(ed.backspace);
     if (key.delete) return edit(ed.del);
     if (key.tab) return edit((s) => ed.insert(s, "  "));
-    if (input && !key.ctrl && !key.meta) {
+    if (input && !mod && !key.meta) {
       const clean = sanitize(input);
       if (clean) edit((s) => ed.insert(s, clean));
     }
@@ -86,12 +94,12 @@ export function NoteEditor({
       const onCursorRow = vi === curVis;
       // Line number only on the first visual row of each logical line.
       const num = seg.start === 0 ? String(seg.row + 1).padStart(gutterW) : " ".repeat(gutterW);
-      const gutter = (
+      const gutterEl = gutter ? (
         <Text color={onCursorRow ? c.accent : c.border}>{num} </Text>
-      );
+      ) : null;
       out.push(
         <Box key={vi} flexDirection="row">
-          {gutter}
+          {gutterEl}
           {onCursorRow ? (
             <Text wrap="truncate">
               <Text color={c.text}>{slice.slice(0, vcol)}</Text>
@@ -109,7 +117,7 @@ export function NoteEditor({
       );
     }
     return out;
-  }, [state.lines, vis, rowTop, curVis, vcol, viewH, gutterW, c]);
+  }, [state.lines, vis, rowTop, curVis, vcol, viewH, gutter, gutterW, c]);
 
   return (
     <Box flexDirection="column" height={height} width={width}>
@@ -126,7 +134,7 @@ export function NoteEditor({
         {rows}
       </Box>
       <Text color={c.muted}>
-        Ctrl+S save · Esc close · Ctrl+Q discard · PgUp/PgDn · drag-select + Cmd+C/⌘V copy·paste
+        ⌘/Ctrl+S save · Esc close · ⌘Q discard · ⌘G {gutter ? "hide" : "show"} nums · ⌥-drag selects text only
       </Text>
     </Box>
   );
