@@ -28,3 +28,13 @@ build/app-icon.png
 
 # user workspace data (notes/tasks) chosen as a workspace folder — never commit
 /vantyx/
+
+# generated per-workspace state inside the committed demo fixture
+/fixtures/demo/config/notes-index.json
+/fixtures/demo/config/state.json
+/fixtures/demo/config/activity.json
+
+# never let an accidental workspace at the repo root get committed
+/notes/
+/tasks/
+/config/

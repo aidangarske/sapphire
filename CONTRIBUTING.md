@@ -4,32 +4,39 @@ Thanks for your interest!
 
 ## Dev setup
 
-Requires macOS with Xcode Command Line Tools, Rust, and Node 18+.
+Requires [Bun](https://bun.sh). No Node, Rust, or platform SDK needed.
 
 ```sh
-npm install
-npm run tauri dev
+bun install
+bun run src/index.ts        # run the UI from source
 ```
 
 ## Tests
 
 ```sh
-npm test          # vitest
-npm run build     # typecheck + bundle
+bun test src/core src/tui   # unit + render/input tests
+bun run typecheck           # tsc --noEmit
+bun run build               # compile a standalone binary into dist/
 ```
 
-The task-board parser (`src/lib/taskParser.ts`) must **round-trip
-byte-identically**: an unmodified `board.md` parsed and re-serialized must equal
-the original. Keep that invariant green.
+The task-board parser (`src/core/board.ts`) must **round-trip byte-identically**:
+an unmodified `board.md` parsed and re-serialized must equal the original. Keep
+that invariant green (`src/core/board.test.ts`).
 
-## Conventions
+## Architecture
 
-- Frontend is Preact + TypeScript; backend is Rust (Tauri commands).
-- Source of truth is plain Markdown on disk, so keep it **local-first**, no servers.
-- Integrations shell out to existing tools (`gh`, `curl`) rather than embedding
-  credentials where possible.
+Four layers, dependencies point downward only:
+
+- `src/core/` — pure logic, no I/O (board parser, journal, PR GraphQL parse).
+- `src/platform/` — side effects (fs with a workspace guard, `gh`, notifier, config).
+- `src/services/` — orchestration over core + platform.
+- `src/cli/` and `src/tui/` — two front ends. Every UI action is also a subcommand.
+
+Source of truth is plain Markdown on disk — keep it **local-first**, no servers.
+Integrations shell out to existing tools (`gh`, `$EDITOR`, the OS notifier)
+rather than embedding credentials.
 
 ## Submitting changes
 
-Keep changes focused, run `npm test` and `npm run build`, and describe the
-behavior change in the PR.
+Keep changes focused, run the tests and typecheck, and describe the behavior
+change in the PR.

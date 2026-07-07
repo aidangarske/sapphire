@@ -1,87 +1,123 @@
-<div align="center">
+# Sapphire
 
-<img src="Docs/images/logo.svg" width="120" alt="Sapphire logo" />
+A fast, lightweight terminal workspace: Markdown **notes**, a **task board**, and your **GitHub PRs** — all in one keyboard-driven TUI that runs anywhere (macOS, Linux, Raspberry Pi).
 
-# Sapphire.md
+Type `sapphire` to open the interactive UI, or use the same actions as plain
+subcommands for scripts and CI. Every note and task is a plain `.md` file on your
+disk — no account, no database, no lock-in.
 
-**A fast, lightweight notes and task app for macOS, built by a developer for developers.**
+```
+ ◈ Sapphire   1 Notes   2 Board   3 PRs                      Sapphire · ~/notes
+```
 
-Write Markdown notes, organize work on a simple task board, and keep an eye on
-your GitHub PRs, all in one small native app that opens instantly.
+## Install
 
-</div>
+Sapphire ships as a single self-contained binary — no runtime to install.
+Download the one for your platform from the [releases page](../../releases):
 
----
+| Platform | File |
+| --- | --- |
+| macOS (Apple Silicon) | `sapphire-macos-arm64` |
+| macOS (Intel) | `sapphire-macos-x64` |
+| Linux (x86_64) | `sapphire-linux-x64` |
+| Linux / Raspberry Pi (64-bit ARM) | `sapphire-linux-arm64` |
 
-Sapphire is local-first: every note and task is a plain `.md` file on your disk.
-No account, no cloud lock-in. The app is just a clean, fast face over your files.
+**macOS**
 
-## Screenshots
+```sh
+chmod +x sapphire-macos-arm64
+xattr -dr com.apple.quarantine sapphire-macos-arm64   # it's unsigned
+sudo mv sapphire-macos-arm64 /usr/local/bin/sapphire
+sapphire
+```
 
-Notes, split raw and rendered Markdown that formats as you type:
+**Linux**
 
-![Notes editor](Docs/images/notes.png)
+```sh
+chmod +x sapphire-linux-x64
+sudo mv sapphire-linux-x64 /usr/local/bin/sapphire
+sapphire
+```
 
-Tasks, a drag-and-drop board backed by `tasks/board.md`:
+**Raspberry Pi** (64-bit Raspberry Pi OS — `uname -m` shows `aarch64`)
 
-![Task board](Docs/images/tasks.png)
+```sh
+chmod +x sapphire-linux-arm64
+sudo mv sapphire-linux-arm64 /usr/local/bin/sapphire
+sapphire
+```
 
-Pull Requests, your GitHub PRs grouped by what needs you, with CI status:
-
-![Pull requests](Docs/images/pull-requests.png)
-
-## Features
-
-- Notes: split raw/rendered Markdown editor, full-text search, numbered notes
-  (`#N`), drag-to-reorder, rename, delete.
-- Tasks: a board backed by `- [ ]` Markdown with columns (Want To Do, Todo,
-  In Progress, Blocked, Done), drag between columns, per-task colors, priority
-  numbers, tags, notes, and a per-PR "create task".
-- Pull Requests: your GitHub PRs via the `gh` CLI (no token to paste), grouped
-  by Created, Needs attention, Review requested, and Assigned, with CI rollup.
-- Notifications: native macOS alerts on CI failed/fixed, review requested, and
-  changes requested. Click to open the PR.
-- Daily log: board activity is appended to a daily note automatically and on demand.
-
-## Install (macOS)
-
-One command installs any missing prerequisites (Xcode CLT, Rust, Node), builds
-the app, and copies it to `/Applications`:
+**Or with [Bun](https://bun.sh)** (any platform):
 
 ```sh
 git clone https://github.com/aidangarske/sapphire.git && cd sapphire
-npm run setup
+bun install
+bun run build        # -> dist/sapphire (or: bun run src/index.ts)
 ```
 
-First launch: right-click **Sapphire** in Applications, then **Open** (it's unsigned).
+Optional: install the [GitHub CLI](https://cli.github.com) and run `gh auth login`
+for the PR features. Notes open in your `$EDITOR` (defaults to `vim`).
 
-## Connect your accounts
+## Use it
 
-- GitHub: run `gh auth login` in a terminal (uses the GitHub CLI, nothing to
-  paste in the app).
+Run `sapphire` with no arguments for the interactive UI:
+
+- **Notes** — a list of notes with a live Markdown preview. `j`/`k` switch notes,
+  the wheel or `↑`/`↓` scroll the open note, `e` edits it in `$EDITOR`. Drag to
+  select + copy works normally.
+- **Board** — a kanban board backed by `tasks/board.md`. `↑`/`↓` pick a card,
+  `<`/`>` move it between columns, `space` completes it, `Enter` shows details.
+- **PRs** — your GitHub PRs grouped by category with CI status. `Enter` opens one
+  in the browser, `t` files it as a task. PRs you authored or that request your
+  review are auto-added to Todo.
+
+Press `?` for the full keymap, `:` for the command palette, `q` to quit.
+
+## Scripting
+
+Everything is also a subcommand. Add `--json` for machine-readable output and
+`-w <path>` to target a workspace:
+
+```sh
+sapphire note new "Release checklist"   # create a note, print its path
+sapphire board                          # print the active board
+sapphire board add Todo "Ship it #release"
+sapphire board done 3                   # complete task #3
+sapphire pr --json                      # your PRs as JSON
+sapphire pr sync                        # file authored/review PRs into Todo
+sapphire log today                      # append today's activity to the daily note
+sapphire watch                          # resident: PR notifications + nightly clear
+```
+
+`sapphire watch` (or `sapphire watch --once` from cron/launchd/systemd) sends
+desktop notifications on CI failures/fixes and review requests even when the UI
+isn't open. Run `sapphire --help` for the full command list.
+
+## Workspace
+
+A workspace is just a folder:
+
+```
+notes/    # each note is a .md file
+tasks/    # board.md (+ extra boards), kanban stored as `- [ ]` markdown
+config/   # index + per-workspace state (JSON)
+```
+
+Sapphire finds it via `-w <path>`, `$SAPPHIRE_WORKSPACE`, the current directory
+(walking up), or your saved default (`sapphire workspace use <path>`).
 
 ## Develop
 
 ```sh
-npm install
-npm run tauri dev     # live-reloading dev window
-npm test              # unit tests
-npm run app:install   # rebuild release app into /Applications
+bun install
+bun run src/index.ts        # run from source
+bun test src/core src/tui   # unit + render/input tests
+bun run typecheck
+bun run build               # compile a standalone binary
 ```
 
-More detail in [Docs/DEVELOPMENT.md](Docs/DEVELOPMENT.md).
-
-## Stack
-
-[Tauri v2](https://tauri.app) (system WebView, small and fast), Preact, TypeScript,
-Vite, and CodeMirror 6. Notes and tasks are plain Markdown; GitHub auth is handled
-by the `gh` CLI.
-
-## Shortcuts
-
-- Cmd+1 to 4: switch tabs. Cmd+N: new note.
-- Option+1 to 9 / Option+] [: jump or cycle notes.
-- Cmd+A: select all (in the editor).
+Built with [Bun](https://bun.sh) + [Ink](https://github.com/vadimdemedes/ink).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the architecture.
 
 ## License
 
