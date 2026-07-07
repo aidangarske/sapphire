@@ -110,6 +110,59 @@ export function del(s: EditorState): EditorState {
   return s;
 }
 
+export interface VSeg {
+  row: number;
+  start: number;
+  end: number;
+}
+
+// Word-wrap each logical line into visual segments no wider than `width`.
+// Breaks at the last space that fits; hard-breaks a word longer than the width.
+export function wrapSegments(lines: string[], width: number): VSeg[] {
+  const w = Math.max(1, width);
+  const out: VSeg[] = [];
+  for (let r = 0; r < lines.length; r++) {
+    const line = lines[r];
+    if (line.length <= w) {
+      out.push({ row: r, start: 0, end: line.length });
+      continue;
+    }
+    let start = 0;
+    while (start < line.length) {
+      if (line.length - start <= w) {
+        out.push({ row: r, start, end: line.length });
+        break;
+      }
+      const hardEnd = start + w;
+      const brk = line.lastIndexOf(" ", hardEnd);
+      if (brk <= start) {
+        out.push({ row: r, start, end: hardEnd });
+        start = hardEnd;
+      } else {
+        out.push({ row: r, start, end: brk });
+        start = brk + 1;
+      }
+    }
+  }
+  return out;
+}
+
+// Map a logical cursor (row, col) to the visual segment holding it and the
+// column within that segment. Picks the segment with the greatest start ≤ col
+// so a cursor sitting on a wrapped space lands at the end of the prior segment.
+export function cursorVisual(vis: VSeg[], row: number, col: number): { index: number; vcol: number } {
+  let index = 0;
+  let best = -1;
+  for (let i = 0; i < vis.length; i++) {
+    if (vis[i].row === row && vis[i].start <= col && vis[i].start >= best) {
+      best = vis[i].start;
+      index = i;
+    }
+  }
+  const seg = vis[index] ?? { row: 0, start: 0, end: 0 };
+  return { index, vcol: Math.min(col - seg.start, seg.end - seg.start) };
+}
+
 // Delete the word before the cursor (trailing whitespace, then non-whitespace).
 export function deleteWord(s: EditorState): EditorState {
   if (s.col === 0) return backspace(s);

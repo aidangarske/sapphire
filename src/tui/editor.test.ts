@@ -58,6 +58,24 @@ describe("editor model", () => {
     expect(at(s)).toEqual([0, 6]);
   });
 
+  it("word-wraps at spaces and hard-breaks long words", () => {
+    const segs = ed.wrapSegments(["the quick brown fox"], 9);
+    const text = (s: ed.VSeg) => "the quick brown fox".slice(s.start, s.end);
+    expect(segs.map(text)).toEqual(["the quick", "brown fox"]);
+    const long = ed.wrapSegments(["abcdefghijkl"], 5);
+    expect(long.map((s) => "abcdefghijkl".slice(s.start, s.end))).toEqual(["abcde", "fghij", "kl"]);
+  });
+
+  it("maps the cursor onto the correct wrapped segment", () => {
+    const lines = ["the quick brown fox"];
+    const segs = ed.wrapSegments(lines, 9); // ["the quick"(0..9), "brown fox"(10..19)]
+    expect(ed.cursorVisual(segs, 0, 2)).toEqual({ index: 0, vcol: 2 });
+    // col 12 is inside "brown fox" (starts at 10) -> second visual row, vcol 2
+    expect(ed.cursorVisual(segs, 0, 12)).toEqual({ index: 1, vcol: 2 });
+    // col 9 is the wrapped space -> end of the first visual row
+    expect(ed.cursorVisual(segs, 0, 9)).toEqual({ index: 0, vcol: 9 });
+  });
+
   it("moves across line boundaries and clamps column", () => {
     let s = ed.fromText("abc\nx");
     s = ed.moveEnd(s); // row0 col3

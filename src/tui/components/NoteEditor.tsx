@@ -28,7 +28,6 @@ export function NoteEditor({
   const [state, setState] = useState<ed.EditorState>(() => ed.fromText(initial));
   const [dirty, setDirty] = useState(false);
   const [top, setTop] = useState(0);
-  const [left, setLeft] = useState(0);
 
   const viewH = Math.max(1, height - 2);
   const viewW = Math.max(10, width - 6);
@@ -70,24 +69,23 @@ export function NoteEditor({
     }
   });
 
-  // Keep the cursor inside the viewport with minimal scrolling.
-  const rowTop = state.row < top ? state.row : state.row >= top + viewH ? state.row - viewH + 1 : top;
-  const colLeft = state.col < left ? state.col : state.col >= left + viewW ? state.col - viewW + 1 : left;
+  // Word-wrap into visual rows, then keep the cursor's visual row in view.
+  const vis = useMemo(() => ed.wrapSegments(state.lines, viewW), [state.lines, viewW]);
+  const { index: curVis, vcol } = ed.cursorVisual(vis, state.row, state.col);
+  const rowTop = curVis < top ? curVis : curVis >= top + viewH ? curVis - viewH + 1 : top;
   if (rowTop !== top) setTop(rowTop);
-  if (colLeft !== left) setLeft(colLeft);
 
   const rows = useMemo(() => {
     const out: React.ReactNode[] = [];
-    for (let r = rowTop; r < Math.min(rowTop + viewH, state.lines.length); r++) {
-      const raw = state.lines[r] ?? "";
-      const slice = raw.slice(colLeft, colLeft + viewW);
-      if (r === state.row) {
-        const cur = state.col - colLeft;
-        const head = slice.slice(0, cur);
-        const at = slice.slice(cur, cur + 1) || " ";
-        const tail = slice.slice(cur + 1);
+    for (let vi = rowTop; vi < Math.min(rowTop + viewH, vis.length); vi++) {
+      const seg = vis[vi];
+      const slice = state.lines[seg.row].slice(seg.start, seg.end);
+      if (vi === curVis) {
+        const head = slice.slice(0, vcol);
+        const at = slice.slice(vcol, vcol + 1) || " ";
+        const tail = slice.slice(vcol + 1);
         out.push(
-          <Text key={r} wrap="truncate">
+          <Text key={vi} wrap="truncate">
             <Text color={c.text}>{head}</Text>
             <Text color={c.bg0} backgroundColor={c.accent}>
               {at}
@@ -97,14 +95,14 @@ export function NoteEditor({
         );
       } else {
         out.push(
-          <Text key={r} color={c.text} wrap="truncate">
+          <Text key={vi} color={c.text} wrap="truncate">
             {slice.length ? slice : " "}
           </Text>,
         );
       }
     }
     return out;
-  }, [state, rowTop, colLeft, viewH, viewW, c]);
+  }, [state.lines, vis, rowTop, curVis, vcol, viewH, c]);
 
   return (
     <Box flexDirection="column" height={height} width={width}>
