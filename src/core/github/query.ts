@@ -8,6 +8,8 @@ query($a:String!,$b:String!,$c:String!){
 }
 fragment F on PullRequest {
   number title url isDraft updatedAt mergeable reviewDecision
+  author{ login }
+  assignees(first:10){ nodes{ login } }
   repository{ nameWithOwner }
   commits(last:1){ nodes{ commit{ statusCheckRollup{ state } } } }
 }
@@ -45,6 +47,7 @@ function mergeNode(map: Map<string, Pr>, node: any, slot: 0 | 1 | 2) {
   let entry = map.get(url);
   if (!entry) {
     const reviewDecision: string = node?.reviewDecision ?? "";
+    const assigneeNodes: any[] = node?.assignees?.nodes ?? [];
     entry = {
       repo: node?.repository?.nameWithOwner ?? "",
       number: Number(node?.number ?? 0),
@@ -56,12 +59,16 @@ function mergeNode(map: Map<string, Pr>, node: any, slot: 0 | 1 | 2) {
           ? "approved"
           : reviewDecision === "CHANGES_REQUESTED"
             ? "changes_requested"
-            : "none",
+            : reviewDecision === "REVIEW_REQUIRED"
+              ? "review_required"
+              : "none",
       draft: Boolean(node?.isDraft),
       conflict: node?.mergeable === "CONFLICTING",
       authored: false,
       assigned: false,
       review_requested_of_me: false,
+      author: node?.author?.login ?? "",
+      assignees: assigneeNodes.map((n) => n?.login ?? "").filter(Boolean),
       updated_at: node?.updatedAt ?? "",
     };
     map.set(url, entry);

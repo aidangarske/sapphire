@@ -28,7 +28,16 @@ export async function fetchPrs(): Promise<Pr[]> {
 }
 
 export function cachedPrs(): Pr[] {
-  return loadPrCache().prs ?? [];
+  // Backfill fields absent from caches written before author/assignees existed.
+  return (loadPrCache().prs ?? []).map((p) => ({
+    ...p,
+    author: p.author ?? "",
+    assignees: p.assignees ?? [],
+  }));
+}
+
+export function cachedLogin(): string {
+  return loadPrCache().account?.login ?? "";
 }
 
 // Poll gh, diff against the CI cache, fire notifications for transitions, and

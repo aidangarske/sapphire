@@ -29,6 +29,22 @@ function ciGlyph(ci: Pr["ci"], c: ThemeTokens): { g: string; color: string } {
   }
 }
 
+function reviewBadge(
+  review: Pr["review"],
+  c: ThemeTokens,
+): { label: string; color: string } | null {
+  switch (review) {
+    case "approved":
+      return { label: "✓ approved", color: c.ok };
+    case "changes_requested":
+      return { label: "✎ changes", color: c.bad };
+    case "review_required":
+      return { label: "• needs review", color: c.warn };
+    default:
+      return null;
+  }
+}
+
 function inCat(p: Pr, cat: Cat): boolean {
   switch (cat) {
     case "created":
@@ -58,6 +74,7 @@ export function PrScreen({
   toast: (t: string) => void;
 }) {
   const c = useTheme();
+  const me = prsvc.cachedLogin();
   const [prs, setPrs] = useState<Pr[]>(() => prsvc.cachedPrs());
   const [cat, setCat] = useState<Cat>("all");
   const [sel, setSel] = useState(0);
@@ -186,14 +203,26 @@ export function PrScreen({
             const p = it.pr;
             const isSel = it.idx === selIdx;
             const { g, color } = ciGlyph(p.ci, c);
+            const rb = reviewBadge(p.review, c);
+            const assignees = (p.assignees ?? [])
+              .map((a) => (me && a === me ? `★${a}` : a))
+              .join(",");
             return (
               <Text key={p.url} wrap="truncate" backgroundColor={isSel ? c.bg3 : undefined}>
                 {"  "}
                 <Text color={color}>{g} </Text>
                 <Text color={c.muted}>#{p.number} </Text>
+                {p.authored ? <Text color={c.accentHi} bold>◆ </Text> : null}
                 <Text color={isSel ? c.accentHi : undefined}>{p.title}</Text>
                 {p.draft ? <Text color={c.muted}> (draft)</Text> : null}
-                {p.review === "changes_requested" ? <Text color={c.bad}> ✎</Text> : null}
+                {p.conflict ? <Text color={c.bad}> ⚠ conflict</Text> : null}
+                {rb ? <Text color={rb.color}> {rb.label}</Text> : null}
+                {p.authored ? null : <Text color={c.muted}> by @{p.author}</Text>}
+                {assignees ? (
+                  <Text color={p.assigned ? c.accentHi : c.muted}> → {assignees}</Text>
+                ) : (
+                  <Text color={c.muted}> → unassigned</Text>
+                )}
               </Text>
             );
           })

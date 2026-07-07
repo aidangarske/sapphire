@@ -28,15 +28,17 @@ function renderPrs(list: Pr[]): string {
     out.push(`${repo} (${prs.length})`);
     for (const p of prs) {
       const tags = [
-        p.authored ? "created" : "",
-        p.review_requested_of_me ? "review" : "",
-        p.assigned ? "assigned" : "",
+        p.authored ? "mine" : p.author ? `by @${p.author}` : "",
+        p.review === "approved" ? "approved" : "",
+        p.review === "changes_requested" ? "changes-requested" : "",
+        p.review === "review_required" ? "needs-review" : "",
+        p.review_requested_of_me ? "review-requested" : "",
+        p.assignees.length ? `→ ${p.assignees.join(",")}` : "unassigned",
         p.draft ? "draft" : "",
         p.conflict ? "conflict" : "",
-        p.review === "changes_requested" ? "changes-requested" : "",
       ]
         .filter(Boolean)
-        .join(",");
+        .join(", ");
       out.push(`  ${CI_GLYPH[p.ci]} #${p.number}  ${p.title}${tags ? `  [${tags}]` : ""}`);
     }
   }

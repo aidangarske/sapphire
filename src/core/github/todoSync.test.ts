@@ -15,6 +15,8 @@ function pr(over: Partial<Pr>): Pr {
     authored: false,
     assigned: false,
     review_requested_of_me: false,
+    author: "",
+    assignees: [],
     updated_at: "",
     ...over,
   };
