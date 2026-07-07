@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { render } from "ink";
+import { useEffect } from "react";
+import { render, useApp } from "ink";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { App } from "./App.tsx";
@@ -35,7 +35,10 @@ function resolveOrCreateWorkspace(): string {
   return fallback;
 }
 
-// Wrap App so the editor-suspend can force a full repaint via instance.clear().
+type Suspend = (cb: () => void | Promise<void>) => Promise<void>;
+
+// Hand Ink's suspendTerminal (which pauses input and forces a full redraw on
+// resume) up to launchTui so the editor swap doesn't strand a blank screen.
 function Root({
   ws,
   suspendAndEdit,
@@ -43,10 +46,12 @@ function Root({
 }: {
   ws: string;
   suspendAndEdit: (path: string) => Promise<void>;
-  onReady: (repaint: () => void) => void;
+  onReady: (suspend: Suspend) => void;
 }) {
-  const [, setNonce] = useState(0);
-  useEffect(() => onReady(() => setNonce((n) => n + 1)), [onReady]);
+  const { suspendTerminal } = useApp();
+  useEffect(() => {
+    onReady(suspendTerminal);
+  }, [onReady, suspendTerminal]);
   return <App ws={ws} suspendAndEdit={suspendAndEdit} />;
 }
 
@@ -60,30 +65,21 @@ export async function launchTui(): Promise<void> {
   }
 
   const ws = resolveOrCreateWorkspace();
-  let repaint = () => {};
-  let instance: ReturnType<typeof render> | null = null;
+  let suspend: Suspend | null = null;
 
   const suspendAndEdit = async (file: string): Promise<void> => {
-    leaveAlt();
-    try {
-      process.stdin.setRawMode?.(false);
-    } catch {
-      /* ignore */
-    }
-    openInEditor(file);
-    try {
-      process.stdin.setRawMode?.(true);
-    } catch {
-      /* ignore */
-    }
-    enterAlt();
-    instance?.clear();
-    repaint();
+    const run = suspend;
+    if (!run) return;
+    await run(() => {
+      leaveAlt();
+      openInEditor(file);
+      enterAlt();
+    });
   };
 
   enterAlt();
-  instance = render(
-    <Root ws={ws} suspendAndEdit={suspendAndEdit} onReady={(fn) => (repaint = fn)} />,
+  const instance = render(
+    <Root ws={ws} suspendAndEdit={suspendAndEdit} onReady={(fn) => (suspend = fn)} />,
     { exitOnCtrlC: false, patchConsole: false },
   );
 
