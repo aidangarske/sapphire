@@ -41,8 +41,9 @@ export function NoteEditor({
   const move = (fn: (s: ed.EditorState) => ed.EditorState) => setState((s) => fn(s));
 
   useInput((input, key) => {
-    // Treat Cmd (super, via the kitty protocol) the same as Ctrl for shortcuts.
-    const mod = key.ctrl || key.super;
+    // Treat Cmd as Ctrl: kitty reports it as super; Ghostty keybinds send it as
+    // an ESC-prefixed key (meta). Accept both alongside real Ctrl.
+    const mod = key.ctrl || key.super || key.meta;
     if (mod && input === "s") {
       onSave(ed.toText(state));
       return;
@@ -69,8 +70,7 @@ export function NoteEditor({
     if (key.pageDown) return move((s) => ed.moveByRows(s, viewH - 1));
     if (key.pageUp) return move((s) => ed.moveByRows(s, -(viewH - 1)));
     if (key.return) return edit(ed.newline);
-    if (key.backspace && (mod || key.meta)) return edit(mod ? ed.deleteToLineStart : ed.deleteWord);
-    if (mod && input === "w") return edit(ed.deleteWord);
+    if ((key.backspace && mod) || (mod && input === "w")) return edit(ed.deleteWord);
     if (key.backspace) return edit(ed.backspace);
     if (key.delete) return edit(ed.del);
     if (key.tab) return edit((s) => ed.insert(s, "  "));

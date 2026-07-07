@@ -168,14 +168,6 @@ export function cursorVisual(vis: VSeg[], row: number, col: number): { index: nu
   return { index, vcol: Math.min(col - seg.start, seg.end - seg.start) };
 }
 
-export function deleteToLineStart(s: EditorState): EditorState {
-  if (s.col === 0) return backspace(s);
-  const line = s.lines[s.row];
-  const lines = s.lines.slice();
-  lines[s.row] = line.slice(s.col);
-  return { lines, row: s.row, col: 0 };
-}
-
 // Delete the word before the cursor (trailing whitespace, then non-whitespace).
 export function deleteWord(s: EditorState): EditorState {
   if (s.col === 0) return backspace(s);
