@@ -39,6 +39,11 @@ export function moveDown(s: EditorState): EditorState {
   return { ...s, row: s.row + 1, col: clampCol(s, s.row + 1, s.col) };
 }
 
+export function moveByRows(s: EditorState, delta: number): EditorState {
+  const row = Math.max(0, Math.min(s.lines.length - 1, s.row + delta));
+  return { ...s, row, col: clampCol(s, row, s.col) };
+}
+
 export function moveHome(s: EditorState): EditorState {
   return { ...s, col: 0 };
 }
