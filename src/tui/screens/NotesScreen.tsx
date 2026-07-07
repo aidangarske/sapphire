@@ -1,16 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { useTheme } from "../useTheme.tsx";
 import { Prompt } from "../components/Prompt.tsx";
 import { NoteEditor } from "../components/NoteEditor.tsx";
 import { useInputLock } from "../inputLock.ts";
-import { useWheel } from "../useWheel.ts";
-import { loadConfig } from "../../platform/config.ts";
-import { renderMarkdownLines } from "../markdown.tsx";
 import * as notes from "../../services/notes.ts";
 import type { OrderedNote } from "../../core/types.ts";
 
 type Mode = "list" | "new" | "rename" | "search" | "confirm-delete";
+
+function fmtDate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+}
+
+// First meaningful body line, stripped of markdown markers and the title itself.
+function previewLine(text: string, title: string): string {
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/^#+\s*/, "").replace(/^[-*]\s+/, "").trim();
+    if (!line || line === title) continue;
+    return line;
+  }
+  return "";
+}
+
+function pad(s: string, w: number): string {
+  return s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length);
+}
 
 export function NotesScreen({
   ws,
@@ -34,8 +50,6 @@ export function NotesScreen({
   const [sel, setSel] = useState(0);
   const [mode, setMode] = useState<Mode>("list");
   const [query, setQuery] = useState("");
-  const [body, setBody] = useState("");
-  const [scroll, setScroll] = useState(0);
   const [editing, setEditing] = useState<{ path: string; name: string; text: string } | null>(null);
 
   const openEditor = (path: string, name: string) => {
@@ -48,7 +62,6 @@ export function NotesScreen({
   const saveEditor = (text: string) => {
     if (!editing) return;
     notes.writeNote(editing.path, text);
-    setBody(text);
     setEditing(null);
     reload();
     toast("saved");
@@ -56,6 +69,19 @@ export function NotesScreen({
 
   const reload = () => setList(notes.listOrderedNotes(ws));
   useEffect(reload, [ws]);
+
+  // A one-line body preview per note, cached until the list changes.
+  const previews = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of list) {
+      try {
+        m.set(n.path, previewLine(notes.readNote(n.path), n.name.replace(/\.md$/, "")));
+      } catch {
+        m.set(n.path, "");
+      }
+    }
+    return m;
+  }, [list]);
 
   // Search matches note names AND contents (full text), showing the matching
   // line as a snippet for body/reference hits.
@@ -71,84 +97,42 @@ export function NotesScreen({
       });
   }, [list, query, ws]);
 
-  const current = filtered[Math.min(sel, filtered.length - 1)];
-
-  // Debounced preview load: scrolling the list stays instant; the note body is
-  // read + rendered only once the cursor settles, so large notes never lag.
-  const bodyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => {
-    setScroll(0);
-    if (!current) {
-      setBody("");
-      return;
-    }
-    const path = current.path;
-    clearTimeout(bodyTimer.current);
-    bodyTimer.current = setTimeout(() => {
-      try {
-        setBody(notes.readNote(path));
-      } catch {
-        setBody("");
-      }
-    }, 40);
-    return () => clearTimeout(bodyTimer.current);
-  }, [current?.path]);
+  const selIdx = Math.min(sel, Math.max(0, filtered.length - 1));
+  const current = filtered[selIdx];
 
   useEffect(() => {
     if (active && mode === "list") {
-      setHints("j/k switch note · ↑↓/wheel scroll · e/⏎ edit · E $EDITOR · n new · / search · ? help");
+      setHints("↑↓ switch note · e/⏎ edit · E $EDITOR · n new · r rename · d delete · / search · ? help");
     }
   }, [active, mode]);
-
-  // Preview scroll (bounded to the note length). Space/Ctrl+D page down, b/Ctrl+U up.
-  const rawLines = useMemo(() => body.split("\n"), [body]);
-  const pageStep = Math.max(1, height - 4);
-  const maxScroll = Math.max(0, rawLines.length - (height - 2));
-  const scrollBy = (d: number) => setScroll((s) => Math.max(0, Math.min(maxScroll, s + d)));
-
-  // Mouse wheel scrolls the preview when the user has opted into mouse mode.
-  useWheel((delta) => scrollBy(delta), active && mode === "list" && loadConfig().mouse);
 
   useInput(
     (input, key) => {
       if (mode !== "list") return;
       const n = filtered.length;
-      // j/k switch notes; arrows + wheel (via alternate-scroll) scroll the preview.
-      if (input === "k") setSel((s) => (n ? (s - 1 + n) % n : 0));
-      else if (input === "j") setSel((s) => (n ? (s + 1) % n : 0));
-      else if (key.upArrow) scrollBy(-1);
-      else if (key.downArrow) scrollBy(1);
-      else if (input === "g") setScroll(0);
-      else if (input === "G") setScroll(maxScroll);
-      else if (key.pageDown || (key.ctrl && input === "d") || input === " ") scrollBy(pageStep);
-      else if (key.pageUp || (key.ctrl && input === "u") || input === "b") scrollBy(-pageStep);
+      if (key.upArrow || input === "k") setSel((s) => (n ? (s - 1 + n) % n : 0));
+      else if (key.downArrow || input === "j") setSel((s) => (n ? (s + 1) % n : 0));
+      else if (input === "g") setSel(0);
+      else if (input === "G") setSel(Math.max(0, n - 1));
+      else if (key.pageDown) setSel((s) => Math.min(n - 1, s + 6));
+      else if (key.pageUp) setSel((s) => Math.max(0, s - 6));
       else if (input === "n") setMode("new");
       else if (input === "r" && current) setMode("rename");
       else if (input === "d" && current) setMode("confirm-delete");
-      else if (input === "/") {
-        setMode("search");
-      } else if ((key.return || input === "e") && current) {
-        openEditor(current.path, current.name);
-      } else if (input === "E" && current) {
-        void suspendAndEdit(current.path).then(() => {
-          try {
-            setBody(notes.readNote(current.path));
-          } catch {
-            /* deleted in editor */
-          }
-          reload();
-        });
+      else if (input === "/") setMode("search");
+      else if ((key.return || input === "e") && current) openEditor(current.path, current.name);
+      else if (input === "E" && current) {
+        void suspendAndEdit(current.path).then(reload);
       }
     },
     { isActive: active && mode === "list" && !editing },
   );
 
-  // Render only the visible window of lines, not the whole note — bounds preview
-  // cost to the viewport regardless of note size.
-  const winStart = Math.max(0, Math.min(scroll, Math.max(0, rawLines.length - 1)));
-  const windowText = rawLines.slice(winStart, winStart + (height - 2)).join("\n");
-  const visible = useMemo(() => renderMarkdownLines(windowText, c), [windowText, c]);
-  const hasMore = rawLines.length > winStart + (height - 2);
+  // Two body rows + a spacer per note; window the list around the selection.
+  const per = 3;
+  const viewNotes = Math.max(1, Math.floor((height - 1) / per));
+  const start = Math.max(0, Math.min(selIdx - Math.floor(viewNotes / 2), Math.max(0, filtered.length - viewNotes)));
+  const shown = filtered.slice(start, start + viewNotes);
 
   if (editing) {
     return (
@@ -164,100 +148,95 @@ export function NotesScreen({
   }
 
   return (
-    <Box flexDirection="row" height={height}>
-      <Box flexDirection="column" width={30} marginRight={1}>
-        {mode === "search" ? (
-          <Prompt
-            label="/"
-            initial={query}
-            onSubmit={(v) => {
-              setQuery(v);
-              setSel(0);
-              setMode("list");
-            }}
-            onCancel={() => {
-              setQuery("");
-              setMode("list");
-            }}
-          />
-        ) : (
-          <Text color={c.muted}>{filtered.length} notes{query ? ` · "${query}"` : ""}</Text>
-        )}
-        {filtered.slice(0, height - 2).map((n, i) => {
-          const isSel = i === Math.min(sel, filtered.length - 1);
+    <Box flexDirection="column" height={height} width={width}>
+      {mode === "search" ? (
+        <Prompt
+          label="/"
+          initial={query}
+          onSubmit={(v) => {
+            setQuery(v);
+            setSel(0);
+            setMode("list");
+          }}
+          onCancel={() => {
+            setQuery("");
+            setMode("list");
+          }}
+        />
+      ) : mode === "new" ? (
+        <Prompt
+          label="new note:"
+          onSubmit={(v) => {
+            setMode("list");
+            if (v.trim()) {
+              const p = notes.createNote(ws, v.trim());
+              reload();
+              const idx = notes.listOrderedNotes(ws).findIndex((n) => n.path === p);
+              if (idx >= 0) setSel(idx);
+              openEditor(p, v.trim());
+            }
+          }}
+          onCancel={() => setMode("list")}
+        />
+      ) : mode === "rename" && current ? (
+        <Prompt
+          label="rename:"
+          initial={current.name.replace(/\.md$/, "")}
+          onSubmit={(v) => {
+            setMode("list");
+            if (v.trim()) {
+              notes.renameNote(ws, current.path, v.trim());
+              reload();
+              toast("renamed");
+            }
+          }}
+          onCancel={() => setMode("list")}
+        />
+      ) : mode === "confirm-delete" && current ? (
+        <ConfirmDelete
+          name={current.name.replace(/\.md$/, "")}
+          onYes={() => {
+            notes.deleteNote(current.path);
+            setMode("list");
+            setSel((s) => Math.max(0, s - 1));
+            reload();
+            toast("deleted");
+          }}
+          onNo={() => setMode("list")}
+        />
+      ) : (
+        <Text color={c.muted}>
+          {filtered.length} notes{query ? ` · "${query}" (Esc clears)` : ""}
+        </Text>
+      )}
+
+      {filtered.length === 0 ? (
+        <Text color={c.muted}>No notes yet. Press n to create one.</Text>
+      ) : (
+        shown.map((n) => {
+          const isSel = n.path === current?.path;
+          const title = n.name.replace(/\.md$/, "");
+          const snippet = n.snippet ?? previews.get(n.path) ?? "";
+          const titleLine = `${isSel ? "▸ " : "  "}${title}`;
+          const subLine = `   ${fmtDate(n.modified)}  ${snippet}`;
           return (
             <Box key={n.path} flexDirection="column">
-              <Text color={isSel ? c.bg0 : undefined} backgroundColor={isSel ? c.accent : undefined} wrap="truncate">
-                {isSel ? "▸" : " "} #{n.id} {n.name.replace(/\.md$/, "")}
+              <Text
+                bold
+                color={isSel ? c.accentHi : c.text}
+                backgroundColor={isSel ? c.bg3 : undefined}
+                wrap="truncate"
+              >
+                {isSel ? pad(titleLine, width) : titleLine}
               </Text>
-              {n.snippet ? (
-                <Text color={c.muted} wrap="truncate">
-                  {"   "}
-                  {n.snippet}
-                </Text>
-              ) : null}
+              <Text color={c.muted} backgroundColor={isSel ? c.bg3 : undefined} wrap="truncate">
+                {isSel ? pad(subLine, width) : subLine}
+              </Text>
+              <Text> </Text>
             </Box>
           );
-        })}
-        {mode === "new" && (
-          <Prompt
-            label="new note:"
-            onSubmit={(v) => {
-              setMode("list");
-              if (v.trim()) {
-                const p = notes.createNote(ws, v.trim());
-                reload();
-                const nl = notes.listOrderedNotes(ws);
-                const idx = nl.findIndex((n) => n.path === p);
-                if (idx >= 0) setSel(idx);
-                openEditor(p, v.trim());
-              }
-            }}
-            onCancel={() => setMode("list")}
-          />
-        )}
-        {mode === "rename" && current && (
-          <Prompt
-            label="rename:"
-            initial={current.name.replace(/\.md$/, "")}
-            onSubmit={(v) => {
-              setMode("list");
-              if (v.trim()) {
-                notes.renameNote(ws, current.path, v.trim());
-                reload();
-                toast("renamed");
-              }
-            }}
-            onCancel={() => setMode("list")}
-          />
-        )}
-        {mode === "confirm-delete" && current && (
-          <ConfirmDelete
-            name={current.name.replace(/\.md$/, "")}
-            onYes={() => {
-              notes.deleteNote(current.path);
-              setMode("list");
-              setSel((s) => Math.max(0, s - 1));
-              reload();
-              toast("deleted");
-            }}
-            onNo={() => setMode("list")}
-          />
-        )}
-      </Box>
-      <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={c.border} paddingX={1}>
-        {current ? (
-          <>
-            <Text color={c.accentHi} bold>
-              {current.name.replace(/\.md$/, "")}
-            </Text>
-            {visible}
-            {hasMore && <Text color={c.muted}>… more (PgDn)</Text>}
-          </>
-        ) : (
-          <Text color={c.muted}>No notes yet. Press n to create one.</Text>
-        )}
-      </Box>
+        })
+      )}
     </Box>
   );
 }
