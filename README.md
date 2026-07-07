@@ -21,6 +21,7 @@ Download the one for your platform from the [releases page](../../releases):
 | macOS (Intel) | `sapphire-macos-x64` |
 | Linux (x86_64) | `sapphire-linux-x64` |
 | Linux / Raspberry Pi (64-bit ARM) | `sapphire-linux-arm64` |
+| Windows (x86_64) | `sapphire-windows-x64.exe` |
 
 **macOS**
 

@@ -17,5 +17,5 @@
     "noEmit": true
   },
   "include": ["src/index.ts", "src/core", "src/platform", "src/services", "src/cli", "src/tui"],
-  "exclude": ["node_modules", "dist", "src/lib", "src/components", "src/App.tsx", "src/main.tsx"]
+  "exclude": ["node_modules", "dist"]
 }
