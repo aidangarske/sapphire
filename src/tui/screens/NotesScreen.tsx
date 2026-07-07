@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { useTheme } from "../useTheme.tsx";
 import { Prompt } from "../components/Prompt.tsx";
+import { NoteEditor } from "../components/NoteEditor.tsx";
 import { useInputLock } from "../inputLock.ts";
 import { useWheel } from "../useWheel.ts";
 import { loadConfig } from "../../platform/config.ts";
@@ -15,6 +16,7 @@ export function NotesScreen({
   ws,
   active,
   height,
+  width,
   suspendAndEdit,
   setHints,
   toast,
@@ -22,6 +24,7 @@ export function NotesScreen({
   ws: string;
   active: boolean;
   height: number;
+  width: number;
   suspendAndEdit: (path: string) => Promise<void>;
   setHints: (h: string) => void;
   toast: (t: string) => void;
@@ -33,6 +36,23 @@ export function NotesScreen({
   const [query, setQuery] = useState("");
   const [body, setBody] = useState("");
   const [scroll, setScroll] = useState(0);
+  const [editing, setEditing] = useState<{ path: string; name: string; text: string } | null>(null);
+
+  const openEditor = (path: string, name: string) => {
+    try {
+      setEditing({ path, name: name.replace(/\.md$/, ""), text: notes.readNote(path) });
+    } catch {
+      setEditing({ path, name: name.replace(/\.md$/, ""), text: "" });
+    }
+  };
+  const saveEditor = (text: string) => {
+    if (!editing) return;
+    notes.writeNote(editing.path, text);
+    setBody(text);
+    setEditing(null);
+    reload();
+    toast("saved");
+  };
 
   const reload = () => setList(notes.listOrderedNotes(ws));
   useEffect(reload, [ws]);
@@ -76,7 +96,7 @@ export function NotesScreen({
 
   useEffect(() => {
     if (active && mode === "list") {
-      setHints("j/k switch note · ↑↓/wheel + Space/Ctrl+D scroll · e/⏎ edit · n new · / search · drag to select+copy · ? help");
+      setHints("j/k switch note · ↑↓/wheel scroll · e/⏎ edit · E $EDITOR · n new · / search · ? help");
     }
   }, [active, mode]);
 
@@ -108,6 +128,8 @@ export function NotesScreen({
       else if (input === "/") {
         setMode("search");
       } else if ((key.return || input === "e") && current) {
+        openEditor(current.path, current.name);
+      } else if (input === "E" && current) {
         void suspendAndEdit(current.path).then(() => {
           try {
             setBody(notes.readNote(current.path));
@@ -118,7 +140,7 @@ export function NotesScreen({
         });
       }
     },
-    { isActive: active && mode === "list" },
+    { isActive: active && mode === "list" && !editing },
   );
 
   // Render only the visible window of lines, not the whole note — bounds preview
@@ -127,6 +149,19 @@ export function NotesScreen({
   const windowText = rawLines.slice(winStart, winStart + (height - 2)).join("\n");
   const visible = useMemo(() => renderMarkdownLines(windowText, c), [windowText, c]);
   const hasMore = rawLines.length > winStart + (height - 2);
+
+  if (editing) {
+    return (
+      <NoteEditor
+        title={editing.name}
+        initial={editing.text}
+        height={height}
+        width={width}
+        onSave={saveEditor}
+        onCancel={() => setEditing(null)}
+      />
+    );
+  }
 
   return (
     <Box flexDirection="row" height={height}>
@@ -175,7 +210,7 @@ export function NotesScreen({
                 const nl = notes.listOrderedNotes(ws);
                 const idx = nl.findIndex((n) => n.path === p);
                 if (idx >= 0) setSel(idx);
-                void suspendAndEdit(p).then(reload);
+                openEditor(p, v.trim());
               }
             }}
             onCancel={() => setMode("list")}

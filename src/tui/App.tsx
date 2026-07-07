@@ -134,7 +134,7 @@ export function App({
           ) : help ? (
             <HelpOverlay />
           ) : view === "notes" ? (
-            <NotesScreen ws={ws} active={!overlay} height={contentHeight} suspendAndEdit={suspendAndEdit} setHints={setHints} toast={toast} />
+            <NotesScreen ws={ws} active={!overlay} height={contentHeight} width={cols - 2} suspendAndEdit={suspendAndEdit} setHints={setHints} toast={toast} />
           ) : view === "board" ? (
             <BoardScreen ws={ws} active={!overlay} height={contentHeight} width={cols - 2} setHints={setHints} toast={toast} />
           ) : (

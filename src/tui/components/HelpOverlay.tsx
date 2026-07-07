@@ -3,7 +3,8 @@ import { useTheme } from "../useTheme.tsx";
 
 const SECTIONS: [string, string[]][] = [
   ["Global", ["1/2/3  switch Notes / Board / PRs", "Tab    cycle views", "t      cycle theme", "?      this help", "q      quit"]],
-  ["Notes", ["j / k      switch note", "↑↓ / wheel  scroll preview", "Space/Ctrl+D page down · b/Ctrl+U up", "g / G      top / bottom", "e or ⏎     edit in $EDITOR", "n new · r rename · d delete", "/          search (name + text)", "drag mouse select, Cmd+C copy"]],
+  ["Notes", ["j / k      switch note", "↑↓ / wheel  scroll preview", "Space/Ctrl+D page down · b/Ctrl+U up", "g / G      top / bottom", "e or ⏎     edit in Sapphire", "E          edit in $EDITOR", "n new · r rename · d delete", "/          search (name + text)"]],
+  ["Editor", ["type to edit · ↑↓←→ move", "Ctrl+S     save", "Esc        save & close", "Ctrl+Q     discard changes", "Ctrl+A/E   line start / end", "Ctrl+W     delete word"]],
   ["Board", ["←→ / h l   switch column", "↑↓ / j k   pick card", "< > or , .  move card to prev/next column", "d          mark done", "d d        delete (press d twice)", "Enter      task details · n add", "[ ]        switch board"]],
   ["PRs", ["grouped by repo", "↑↓ move · ←→/asdf category", "⏎          open in browser", "t          task from selected PR", "T          task for every PR in repo", "r          refresh"]],
 ];

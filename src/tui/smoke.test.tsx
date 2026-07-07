@@ -27,7 +27,7 @@ function mount(node: React.ReactNode) {
 describe("TUI smoke", () => {
   it("renders the notes screen with a note from the workspace", () => {
     const { lastFrame } = mount(
-      <NotesScreen ws={WS} active={false} height={20} suspendAndEdit={async () => {}} setHints={noop} toast={noop} />,
+      <NotesScreen ws={WS} active={false} height={20} width={120} suspendAndEdit={async () => {}} setHints={noop} toast={noop} />,
     );
     const out = lastFrame() ?? "";
     expect(out).toContain("notes");
