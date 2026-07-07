@@ -29,20 +29,48 @@ function ciGlyph(ci: Pr["ci"], c: ThemeTokens): { g: string; color: string } {
   }
 }
 
-function reviewBadge(
-  review: Pr["review"],
-  c: ThemeTokens,
-): { label: string; color: string } | null {
+function reviewGlyph(review: Pr["review"], c: ThemeTokens): { g: string; color: string } | null {
   switch (review) {
     case "approved":
-      return { label: "✓ approved", color: c.ok };
+      return { g: "✓", color: c.ok };
     case "changes_requested":
-      return { label: "✎ changes", color: c.bad };
-    case "review_required":
-      return { label: "• needs review", color: c.warn };
+      return { g: "✎", color: c.bad };
     default:
       return null;
   }
+}
+
+function reviewWord(review: Pr["review"]): { label: string; tone: "ok" | "bad" | "warn" | "muted" } {
+  switch (review) {
+    case "approved":
+      return { label: "approved", tone: "ok" };
+    case "changes_requested":
+      return { label: "changes requested", tone: "bad" };
+    case "review_required":
+      return { label: "needs review", tone: "warn" };
+    default:
+      return { label: "no review", tone: "muted" };
+  }
+}
+
+const CI_WORD: Record<Pr["ci"], string> = {
+  failing: "failing",
+  pending: "pending",
+  passing: "passing",
+  "no-checks": "no checks",
+  unknown: "unknown",
+};
+
+function relTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return "just now";
+  const m = s / 60;
+  if (m < 60) return `${Math.round(m)}m ago`;
+  const h = m / 60;
+  if (h < 24) return `${Math.round(h)}h ago`;
+  return `${Math.round(h / 24)}d ago`;
 }
 
 function inCat(p: Pr, cat: Cat): boolean {
@@ -164,7 +192,7 @@ export function PrScreen({
     { isActive: active },
   );
 
-  const rows = Math.max(3, height - 4);
+  const rows = Math.max(3, height - 5);
   const focusItem = items.findIndex((it) => it.kind === "pr" && it.idx === selIdx);
   const start =
     items.length > rows && focusItem >= 0
@@ -203,31 +231,63 @@ export function PrScreen({
             const p = it.pr;
             const isSel = it.idx === selIdx;
             const { g, color } = ciGlyph(p.ci, c);
-            const rb = reviewBadge(p.review, c);
-            const assignees = (p.assignees ?? [])
-              .map((a) => (me && a === me ? `★${a}` : a))
-              .join(",");
+            const rg = reviewGlyph(p.review, c);
             return (
               <Text key={p.url} wrap="truncate" backgroundColor={isSel ? c.bg3 : undefined}>
                 {"  "}
                 <Text color={color}>{g} </Text>
-                <Text color={c.muted}>#{p.number} </Text>
-                {p.authored ? <Text color={c.accentHi} bold>◆ </Text> : null}
-                <Text color={isSel ? c.accentHi : undefined}>{p.title}</Text>
+                <Text color={rg ? rg.color : c.muted}>{rg ? rg.g : " "} </Text>
+                <Text color={p.authored ? c.accent : c.muted} bold={p.authored}>
+                  {`#${p.number}`.padEnd(7)}
+                </Text>
+                <Text color={isSel ? c.accentHi : c.text}>{p.title}</Text>
                 {p.draft ? <Text color={c.muted}> (draft)</Text> : null}
-                {p.conflict ? <Text color={c.bad}> ⚠ conflict</Text> : null}
-                {rb ? <Text color={rb.color}> {rb.label}</Text> : null}
-                {p.authored ? null : <Text color={c.muted}> by @{p.author}</Text>}
-                {assignees ? (
-                  <Text color={p.assigned ? c.accentHi : c.muted}> → {assignees}</Text>
-                ) : (
-                  <Text color={c.muted}> → unassigned</Text>
-                )}
+                {p.conflict ? <Text color={c.bad}> ⚠</Text> : null}
               </Text>
             );
           })
         )}
       </Box>
+      {current ? <DetailLine pr={current} me={me} c={c} /> : null}
+    </Box>
+  );
+}
+
+function DetailLine({ pr, me, c }: { pr: Pr; me: string; c: ThemeTokens }) {
+  const tone = { ok: c.ok, bad: c.bad, warn: c.warn, muted: c.muted };
+  const rw = reviewWord(pr.review);
+  const who = (pr.assignees ?? []);
+  const dot = <Text color={c.border}> · </Text>;
+  return (
+    <Box>
+      <Text wrap="truncate">
+        <Text color={c.muted}>#{pr.number} </Text>
+        {pr.authored ? (
+          <Text color={c.accent} bold>mine</Text>
+        ) : (
+          <Text color={c.muted}>by @{pr.author}</Text>
+        )}
+        {dot}
+        <Text color={tone[rw.tone]}>{rw.label}</Text>
+        {dot}
+        <Text color={c.muted}>CI {CI_WORD[pr.ci]}</Text>
+        {pr.conflict ? (
+          <>
+            {dot}
+            <Text color={c.bad}>conflict</Text>
+          </>
+        ) : null}
+        {dot}
+        {who.length ? (
+          <Text color={pr.assigned ? c.accentHi : c.muted}>
+            {who.map((a) => (me && a === me ? `★${a}` : a)).join(", ")}
+          </Text>
+        ) : (
+          <Text color={c.muted}>unassigned</Text>
+        )}
+        {dot}
+        <Text color={c.muted}>{relTime(pr.updated_at)}</Text>
+      </Text>
     </Box>
   );
 }
