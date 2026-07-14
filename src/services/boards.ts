@@ -9,6 +9,7 @@ import {
   type Board,
 } from "../core/board.ts";
 import { loadState, patchState } from "../platform/wsState.ts";
+import { prTodoTitle } from "../core/github/todoSync.ts";
 import type { BoardFile } from "../core/types.ts";
 import type { Pr } from "../core/github/types.ts";
 
@@ -74,13 +75,13 @@ export function clearDoneColumn(ws: string, file = "board.md"): number {
   return removed;
 }
 
-export function createTaskFromPr(ws: string, pr: Pr): void {
+export function createTaskFromPr(ws: string, pr: Pr): boolean {
   const file = "board.md";
   const board = ensureColumns(readBoard(ws, file));
-  const repoName = pr.repo.split("/").pop() ?? pr.repo;
-  const title = pr.review_requested_of_me
-    ? `Review: ${pr.title} #${repoName} #review`
-    : `${pr.title} #${repoName}`;
+  const exists = board.columns.some((c) => tasksIn(c).some((t) => t.pr === pr.url));
+  if (exists) return false;
+  const title = prTodoTitle(pr);
   if (!addTask(board, "Todo", title, { pr: pr.url })) throw new Error("Todo column missing");
   writeBoard(ws, file, board);
+  return true;
 }

@@ -2,18 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { useTheme } from "../useTheme.tsx";
 import * as prsvc from "../../services/prs.ts";
-import { needsAttention } from "../../core/github/types.ts";
+import { needsAttention, readyForReview } from "../../core/github/types.ts";
 import { openUrl } from "../../platform/opener.ts";
 import type { Pr } from "../../core/github/types.ts";
 import type { ThemeTokens } from "../theme.ts";
 
-type Cat = "all" | "created" | "attention" | "review" | "assigned";
+type Cat = "all" | "created" | "attention" | "review" | "assigned" | "ready";
 const CATS: { id: Cat; label: string; key: string }[] = [
   { id: "all", label: "All", key: "" },
   { id: "created", label: "Created", key: "a" },
   { id: "attention", label: "Needs attention", key: "s" },
   { id: "review", label: "Review requested", key: "d" },
   { id: "assigned", label: "Assigned", key: "f" },
+  { id: "ready", label: "Ready for review", key: "g" },
 ];
 
 function ciGlyph(ci: Pr["ci"], c: ThemeTokens): { g: string; color: string } {
@@ -83,6 +84,8 @@ function inCat(p: Pr, cat: Cat): boolean {
       return p.review_requested_of_me;
     case "assigned":
       return p.assigned;
+    case "ready":
+      return readyForReview(p);
     default:
       return true;
   }
@@ -155,7 +158,7 @@ export function PrScreen({
 
   useEffect(() => {
     if (active)
-      setHints("↑↓ move · ←→/asdf category · ⏎ open · t task · T all-in-repo · r refresh · ? help");
+      setHints("↑↓ move · ←→/asdfg category · ⏎ open · n task · N all-in-repo · r refresh · ? help");
   }, [active]);
 
   useInput(
@@ -171,7 +174,7 @@ export function PrScreen({
         const i = CATS.findIndex((x) => x.id === cat);
         setCat(CATS[(i + 1) % CATS.length].id);
         setSel(0);
-      } else if ("asdf".includes(input)) {
+      } else if (input && "asdfg".includes(input)) {
         const hit = CATS.find((x) => x.key === input);
         if (hit) {
           setCat(hit.id);
@@ -180,13 +183,12 @@ export function PrScreen({
       } else if (key.return && current) {
         openUrl(current.url);
         toast("opened in browser");
-      } else if (input === "t" && current) {
-        prsvc.createTaskFromPr(ws, current);
-        toast("task created");
-      } else if (input === "T" && current) {
+      } else if (input === "n" && current) {
+        toast(prsvc.createTaskFromPr(ws, current) ? "task created" : "already filed");
+      } else if (input === "N" && current) {
         const repoPrs = filtered.filter((p) => p.repo === current.repo);
-        for (const p of repoPrs) prsvc.createTaskFromPr(ws, p);
-        toast(`filed ${repoPrs.length} from ${current.repo.split("/").pop()}`);
+        const filed = repoPrs.reduce((n, p) => n + (prsvc.createTaskFromPr(ws, p) ? 1 : 0), 0);
+        toast(`filed ${filed} from ${current.repo.split("/").pop()}`);
       } else if (input === "r") refresh();
     },
     { isActive: active },

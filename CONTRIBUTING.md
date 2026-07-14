@@ -28,13 +28,13 @@ that invariant green (`src/core/board.test.ts`).
 Four layers, dependencies point downward only:
 
 - `src/core/` — pure logic, no I/O (board parser, journal, PR GraphQL parse).
-- `src/platform/` — side effects (fs with a workspace guard, `gh`, notifier, config).
+- `src/platform/` — side effects (fs with a workspace guard, `gh`, config).
 - `src/services/` — orchestration over core + platform.
 - `src/cli/` and `src/tui/` — two front ends. Every UI action is also a subcommand.
 
 Source of truth is plain Markdown on disk — keep it **local-first**, no servers.
-Integrations shell out to existing tools (`gh`, `$EDITOR`, the OS notifier)
-rather than embedding credentials.
+Integrations shell out to existing tools (`gh`, `$EDITOR`) rather than
+embedding credentials.
 
 ## Submitting changes
 

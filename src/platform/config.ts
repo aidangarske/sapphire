@@ -1,10 +1,8 @@
 import { globalConfigPath } from "./paths.ts";
 import { readTextIfExists, writeText } from "./fs.ts";
-import { NOTIFY_DEFAULTS, type NotifySettings } from "../core/watcher.ts";
 
 export interface GlobalConfig {
   theme: string;
-  notify: NotifySettings;
   mouse: boolean;
   defaultWorkspace?: string;
   recentWorkspaces: string[];
@@ -12,7 +10,6 @@ export interface GlobalConfig {
 
 const DEFAULTS: GlobalConfig = {
   theme: "sapphire",
-  notify: { ...NOTIFY_DEFAULTS },
   // Off by default so native terminal text selection / copy-paste keeps working.
   // Turn on (config set mouse true) to enable wheel-scroll of the note preview.
   mouse: false,
@@ -35,7 +32,6 @@ export function loadConfig(): GlobalConfig {
   cached = {
     ...DEFAULTS,
     ...parsed,
-    notify: { ...DEFAULTS.notify, ...(parsed.notify ?? {}) },
     recentWorkspaces: parsed.recentWorkspaces ?? [],
   };
   return cached;

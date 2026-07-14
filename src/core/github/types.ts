@@ -26,3 +26,16 @@ export function needsAttention(p: Pr): boolean {
     p.review_requested_of_me || p.ci === "failing" || p.conflict || p.review === "changes_requested"
   );
 }
+
+// A PR you authored that is ready for someone else to review: not a draft, no
+// merge conflict, CI not failing, and not already approved or awaiting your fixes.
+export function readyForReview(p: Pr): boolean {
+  return (
+    p.authored &&
+    !p.draft &&
+    !p.conflict &&
+    p.ci !== "failing" &&
+    p.review !== "approved" &&
+    p.review !== "changes_requested"
+  );
+}

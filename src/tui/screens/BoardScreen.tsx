@@ -5,6 +5,7 @@ import { Prompt } from "../components/Prompt.tsx";
 import { TaskDetail } from "../components/TaskDetail.tsx";
 import { openUrl } from "../../platform/opener.ts";
 import * as boards from "../../services/boards.ts";
+import { syncCreatedPrsToTodo } from "../../services/prs.ts";
 import { logActivity } from "../../services/daily.ts";
 import {
   tasksIn,
@@ -70,6 +71,16 @@ export function BoardScreen({
   const reload = (f = file) => setBoard(boards.readBoard(ws, f));
   useEffect(() => reload(), [ws, file]);
 
+  const refresh = () => {
+    toast("refreshing PRs…");
+    syncCreatedPrsToTodo(ws)
+      .then((added) => {
+        reload();
+        toast(added > 0 ? `+${added} new PR${added === 1 ? "" : "s"}` : "up to date");
+      })
+      .catch(() => toast("refresh failed — check gh auth"));
+  };
+
   const cols = board.columns;
   const clampedCol = Math.min(colIdx, cols.length - 1);
   const col = cols[clampedCol];
@@ -90,7 +101,7 @@ export function BoardScreen({
 
   useEffect(() => {
     if (active && mode === "list") {
-      setHints("↑↓ pick card · < > move to next/prev column · d done · dd delete · ⏎ details · n add · ←→ switch column · [ ] board");
+      setHints("↑↓ pick card · < > move column · d done · dd delete · ⏎ details · o open PR · n add · r refresh · ←→ column · [ ] board");
     }
   }, [active, mode]);
 
@@ -100,8 +111,9 @@ export function BoardScreen({
   };
 
   const moveCard = (dir: -1 | 1) => {
-    if (!col || cards.length === 0) return;
-    const target = cols[clampedCol + dir];
+    if (!col || cards.length === 0 || cols.length === 0) return;
+    const dest = (clampedCol + dir + cols.length) % cols.length;
+    const target = cols[dest];
     if (!target) return;
     const task = cards[Math.min(cardIdx, cards.length - 1)];
     moveTask(board, task, target.key, 9999);
@@ -109,7 +121,7 @@ export function BoardScreen({
     else if (target.key === "Blocked") logActivity(ws, "blocked", task.title, undefined, task.pr);
     else if (target.key === "In Progress") logActivity(ws, "inprogress", task.title, undefined, task.pr);
     persist(board);
-    setColIdx(clampedCol + dir);
+    setColIdx(dest);
     setCardIdx(0);
   };
 
@@ -131,10 +143,10 @@ export function BoardScreen({
     (input, key) => {
       if (mode !== "list") return;
       if (key.leftArrow || input === "h") {
-        setColIdx((i) => Math.max(0, Math.min(i, cols.length - 1) - 1));
+        setColIdx((i) => (cols.length ? (i - 1 + cols.length) % cols.length : 0));
         setCardIdx(0);
       } else if (key.rightArrow || input === "l") {
-        setColIdx((i) => Math.min(cols.length - 1, i + 1));
+        setColIdx((i) => (cols.length ? (i + 1) % cols.length : 0));
         setCardIdx(0);
       } else if (key.upArrow || input === "k")
         setCardIdx((i) => (cards.length ? (i - 1 + cards.length) % cards.length : 0));
@@ -161,8 +173,12 @@ export function BoardScreen({
           persist(board);
           ddPending.current = { idx: cardIdx, ts: now };
         }
+      } else if (input === "o" && selCard?.pr) {
+        openUrl(selCard.pr);
+        toast("opened PR");
       } else if (input === "]") switchBoard(1);
       else if (input === "[") switchBoard(-1);
+      else if (input === "r") refresh();
     },
     { isActive: active && mode === "list" },
   );

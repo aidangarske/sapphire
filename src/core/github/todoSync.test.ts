@@ -23,31 +23,40 @@ function pr(over: Partial<Pr>): Pr {
 }
 
 describe("plannedTodoAdds", () => {
-  it("adds authored PRs with a plain repo tag", () => {
+  it("prefixes authored PRs with PR <repo>:", () => {
     const adds = plannedTodoAdds([pr({ authored: true, title: "Fix RNG", url: "u1" })], new Set(), new Set());
-    expect(adds).toEqual([{ title: "Fix RNG #wolfssl", url: "u1" }]);
+    expect(adds).toEqual([{ title: "PR wolfssl: Fix RNG", url: "u1" }]);
   });
 
-  it("adds review-requested PRs with a Review: label and #review tag", () => {
+  it("prefixes review-requested PRs with REVIEW <repo>:", () => {
     const adds = plannedTodoAdds(
       [pr({ review_requested_of_me: true, title: "Add API", url: "u2", repo: "wolfSSL/wolfTPM" })],
       new Set(),
       new Set(),
     );
-    expect(adds).toEqual([{ title: "Review: Add API #wolfTPM #review", url: "u2" }]);
+    expect(adds).toEqual([{ title: "REVIEW wolfTPM: Add API", url: "u2" }]);
   });
 
-  it("adds both kinds together", () => {
+  it("prefixes assigned PRs with ASSIGNED <repo>:", () => {
+    const adds = plannedTodoAdds(
+      [pr({ assigned: true, title: "Assigned to me", url: "u3", repo: "wolfSSL/wolfMQTT" })],
+      new Set(),
+      new Set(),
+    );
+    expect(adds).toEqual([{ title: "ASSIGNED wolfMQTT: Assigned to me", url: "u3" }]);
+  });
+
+  it("adds all three kinds together", () => {
     const adds = plannedTodoAdds(
       [
         pr({ authored: true, title: "Mine", url: "a" }),
         pr({ review_requested_of_me: true, title: "Theirs", url: "b" }),
-        pr({ assigned: true, title: "Just assigned", url: "c" }), // neither authored nor review -> skipped
+        pr({ assigned: true, title: "Just assigned", url: "c" }),
       ],
       new Set(),
       new Set(),
     );
-    expect(adds.map((a) => a.url)).toEqual(["a", "b"]);
+    expect(adds.map((a) => a.url)).toEqual(["a", "b", "c"]);
   });
 
   it("skips PRs already seen or already on the board", () => {

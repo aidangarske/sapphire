@@ -4,16 +4,11 @@ import { THEME_IDS } from "../../tui/theme.ts";
 import type { ParsedArgs } from "../args.ts";
 
 function get(cfg: GlobalConfig, key: string): unknown {
-  if (key.startsWith("notify.")) return (cfg.notify as any)[key.slice(7)];
   return (cfg as any)[key];
 }
 
 function set(cfg: GlobalConfig, key: string, val: string): void {
   const bool = val === "true" ? true : val === "false" ? false : undefined;
-  if (key.startsWith("notify.")) {
-    (cfg.notify as any)[key.slice(7)] = bool ?? val;
-    return;
-  }
   if (key === "theme") {
     if (!THEME_IDS.includes(val)) throw new Error(`unknown theme '${val}'`);
     cfg.theme = val;
@@ -34,7 +29,7 @@ export function configCommand(sub: string, args: ParsedArgs): void {
     case "":
     case "list": {
       ok(cfg, (r) =>
-        Object.entries({ theme: r.theme, mouse: r.mouse, ...Object.fromEntries(Object.entries(r.notify).map(([k, v]) => [`notify.${k}`, v])) })
+        Object.entries({ theme: r.theme, mouse: r.mouse })
           .map(([k, v]) => `${k} = ${v}`)
           .join("\n"),
       );

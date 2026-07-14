@@ -10,7 +10,7 @@ import { NotesScreen } from "./screens/NotesScreen.tsx";
 import { BoardScreen } from "./screens/BoardScreen.tsx";
 import { PrScreen } from "./screens/PrScreen.tsx";
 import { loadConfig, updateConfig } from "../platform/config.ts";
-import { runWatcherTick, syncCreatedPrsToTodo } from "../services/prs.ts";
+import { syncCreatedPrsToTodo } from "../services/prs.ts";
 import { runNightlyClear } from "../services/nightly.ts";
 import { flushDailyToNote } from "../services/daily.ts";
 import { inputLocked } from "./inputLock.ts";
@@ -52,12 +52,11 @@ export function App({
     setTimeout(() => setToastMsg(undefined), 2000);
   };
 
-  // Background poll while the TUI is open: notifications, PR->Todo sync, nightly clear.
+  // Background poll while the TUI is open: PR->Todo sync + nightly Done clear.
   useEffect(() => {
     let stop = false;
     const tick = () => {
       if (stop) return;
-      void runWatcherTick().catch(() => {});
       void syncCreatedPrsToTodo(ws).catch(() => {});
       runNightlyClear(ws);
     };

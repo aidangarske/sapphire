@@ -87,12 +87,12 @@ sapphire board done 3                   # complete task #3
 sapphire pr --json                      # your PRs as JSON
 sapphire pr sync                        # file authored/review PRs into Todo
 sapphire log today                      # append today's activity to the daily note
-sapphire watch                          # resident: PR notifications + nightly clear
+sapphire watch                          # resident: PR->Todo sync + nightly clear
 ```
 
-`sapphire watch` (or `sapphire watch --once` from cron/launchd/systemd) sends
-desktop notifications on CI failures/fixes and review requests even when the UI
-isn't open. Run `sapphire --help` for the full command list.
+`sapphire watch` (or `sapphire watch --once` from cron/launchd/systemd) keeps the
+board's Todo column synced with your PRs and clears the Done column nightly, even
+when the UI isn't open. Run `sapphire --help` for the full command list.
 
 ## Workspace
 
